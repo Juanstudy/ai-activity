@@ -4,9 +4,9 @@ import QtQuick.Layouts
 
 Rectangle {
     id: root
-    implicitHeight: 32
-    implicitWidth: rowLayout.implicitWidth + 8
-    radius: 16
+    implicitHeight: 36
+    implicitWidth: rowLayout.implicitWidth + 10
+    radius: 18
     color: "#161517"
     border.color: Qt.rgba(1, 1, 1, 0.07)
     border.width: 1
@@ -32,9 +32,9 @@ Rectangle {
 
             Rectangle {
                 id: itemRect
-                implicitHeight: 24
-                implicitWidth: textItem.implicitWidth + 14
-                radius: 12
+                implicitHeight: 28
+                implicitWidth: textItem.implicitWidth + 16
+                radius: 14
                 color: backend.currentRange === modelData.id ? theme.accent : (mouseArea.containsMouse ? Qt.rgba(1, 1, 1, 0.05) : "transparent")
 
                 Behavior on color {
@@ -45,7 +45,7 @@ Rectangle {
                     id: textItem
                     anchors.centerIn: parent
                     text: modelData.label
-                    font.pixelSize: 11
+                    font.pixelSize: 12
                     font.family: "monospace"
                     font.bold: backend.currentRange === modelData.id
                     color: backend.currentRange === modelData.id ? theme.accentForeground : (mouseArea.containsMouse ? "#fafcfb" : "#7c777d")

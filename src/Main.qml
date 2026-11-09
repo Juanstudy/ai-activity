@@ -8,10 +8,10 @@ import "components"
 ApplicationWindow {
     id: window
     visible: true
-    width: 1140
-    height: 760
-    minimumWidth: 880
-    minimumHeight: 620
+    width: 1240
+    height: 820
+    minimumWidth: 960
+    minimumHeight: 680
     title: "ai-activity"
     color: "#0c0b0c"
 
@@ -69,13 +69,13 @@ ApplicationWindow {
                 spacing: 8
                 Text {
                     text: "󰄧"
-                    font.pixelSize: 14
+                    font.pixelSize: 16
                     color: theme.accent
                 }
 
                 Text {
                     text: "ai-activity"
-                    font.pixelSize: 13
+                    font.pixelSize: 14
                     font.bold: true
                     font.family: "monospace"
                     color: "#fafcfb"
@@ -83,7 +83,7 @@ ApplicationWindow {
 
                 Text {
                     text: "· " + backend.lastSyncStatus
-                    font.pixelSize: 10
+                    font.pixelSize: 11
                     font.family: "monospace"
                     color: "#584e51"
                 }
@@ -103,9 +103,9 @@ ApplicationWindow {
                 spacing: 6
 
                 Rectangle {
-                    implicitHeight: 26
-                    implicitWidth: trmText.implicitWidth + 16
-                    radius: 13
+                    implicitHeight: 30
+                    implicitWidth: trmText.implicitWidth + 18
+                    radius: 15
                     color: "#161517"
                     border.color: Qt.rgba(1, 1, 1, 0.06)
                     border.width: 1
@@ -114,7 +114,7 @@ ApplicationWindow {
                         id: trmText
                         anchors.centerIn: parent
                         text: "1 USD = " + Math.round(backend.trmRate).toLocaleString() + " COP"
-                        font.pixelSize: 10
+                        font.pixelSize: 11
                         font.family: "monospace"
                         color: theme.accent
                     }
@@ -127,9 +127,9 @@ ApplicationWindow {
                 }
 
                 Rectangle {
-                    implicitHeight: 26
-                    implicitWidth: 26
-                    radius: 13
+                    implicitHeight: 30
+                    implicitWidth: 30
+                    radius: 15
                     color: refMouse.containsMouse ? "#201e22" : "#161517"
                     border.color: Qt.rgba(1, 1, 1, 0.06)
                     border.width: 1
@@ -137,7 +137,7 @@ ApplicationWindow {
                     Text {
                         anchors.centerIn: parent
                         text: "↻"
-                        font.pixelSize: 12
+                        font.pixelSize: 13
                         color: "#fafcfb"
                     }
 
@@ -151,9 +151,9 @@ ApplicationWindow {
                 }
 
                 Rectangle {
-                    implicitHeight: 26
-                    implicitWidth: 26
-                    radius: 13
+                    implicitHeight: 30
+                    implicitWidth: 30
+                    radius: 15
                     color: helpMouse.containsMouse ? "#201e22" : "#161517"
                     border.color: Qt.rgba(1, 1, 1, 0.06)
                     border.width: 1
@@ -161,7 +161,7 @@ ApplicationWindow {
                     Text {
                         anchors.centerIn: parent
                         text: "?"
-                        font.pixelSize: 11
+                        font.pixelSize: 12
                         font.bold: true
                         color: "#7c777d"
                     }
@@ -243,25 +243,25 @@ ApplicationWindow {
         // ── BOTTOM OMARCHY FOOTER ──
         RowLayout {
             Layout.fillWidth: true
-            Layout.topMargin: 2
+            Layout.topMargin: 4
             spacing: 8
 
             Text {
                 text: "󰄧 ai-activity"
-                font.pixelSize: 10
+                font.pixelSize: 11
                 font.family: "monospace"
                 color: "#584e51"
             }
 
             Text {
                 text: "|"
-                font.pixelSize: 10
+                font.pixelSize: 11
                 color: "#3a363d"
             }
 
             Text {
                 text: "1-8 range · R refresh · ? shortcuts"
-                font.pixelSize: 10
+                font.pixelSize: 11
                 font.family: "monospace"
                 color: "#584e51"
             }
@@ -273,14 +273,14 @@ ApplicationWindow {
 
                 Text {
                     text: "Close"
-                    font.pixelSize: 10
+                    font.pixelSize: 11
                     font.family: "monospace"
                     color: "#584e51"
                 }
 
                 Rectangle {
-                    implicitWidth: 32
-                    implicitHeight: 18
+                    implicitWidth: 36
+                    implicitHeight: 20
                     radius: 4
                     color: "#18171a"
                     border.color: Qt.rgba(1, 1, 1, 0.08)
@@ -289,7 +289,7 @@ ApplicationWindow {
                     Text {
                         anchors.centerIn: parent
                         text: "Esc"
-                        font.pixelSize: 9
+                        font.pixelSize: 10
                         font.bold: true
                         font.family: "monospace"
                         color: theme.accent

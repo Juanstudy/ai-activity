@@ -9,7 +9,7 @@ Rectangle {
     radius: Math.max(6, Math.min(10, theme.radius))
     border.color: Qt.rgba(1, 1, 1, 0.05)
     border.width: 1
-    implicitHeight: 168
+    implicitHeight: 188
     Layout.fillWidth: true
 
     property var dayLookup: ({})
@@ -40,8 +40,8 @@ Rectangle {
     Component.onCompleted: rebuildLookup()
 
     readonly property int weeksCount: 53
-    readonly property int cellSize: 11
-    readonly property int cellSpacing: 3
+    readonly property int cellSize: 13
+    readonly property int cellSpacing: 4
 
     readonly property date today: new Date()
     readonly property date startDate: {
@@ -94,7 +94,7 @@ Rectangle {
 
             Text {
                 text: qsTr("ACTIVITY HEATMAP")
-                font.pixelSize: 9
+                font.pixelSize: 10
                 font.bold: true
                 font.family: "monospace"
                 color: "#7c777d"
@@ -106,7 +106,7 @@ Rectangle {
                 text: root.hoveredDay
                     ? (root.hoveredDay.date + " · " + root.hoveredDay.turns + " turns · $" + root.hoveredDay.costUsd.toFixed(4) + " USD (~$" + Math.round(root.hoveredDay.costUsd * backend.trmRate).toLocaleString() + " COP) · " + backend.formatCompact(root.hoveredDay.tokensTotal) + " tok")
                     : qsTr("hover a day for stats")
-                font.pixelSize: 10
+                font.pixelSize: 11
                 font.family: "monospace"
                 color: root.hoveredDay ? theme.accent : "#584e51"
             }
@@ -122,7 +122,7 @@ Rectangle {
             Column {
                 spacing: root.cellSpacing
                 Layout.alignment: Qt.AlignTop
-                Item { width: 22; height: 14 }
+                Item { width: 24; height: 16 }
 
                 Repeater {
                     model: [
@@ -136,13 +136,13 @@ Rectangle {
                     ]
 
                     Item {
-                        width: 22
+                        width: 24
                         height: root.cellSize
 
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
                             text: modelData.label
-                            font.pixelSize: 8
+                            font.pixelSize: 9
                             font.family: "monospace"
                             color: "#584e51"
                             visible: modelData.show
@@ -154,7 +154,7 @@ Rectangle {
             // Weeks grid
             Flickable {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 14 + (root.cellSize + root.cellSpacing) * 7
+                Layout.preferredHeight: 16 + (root.cellSize + root.cellSpacing) * 7
                 contentWidth: root.weeksCount * (root.cellSize + root.cellSpacing)
                 contentHeight: height
                 clip: true
@@ -173,10 +173,10 @@ Rectangle {
 
                             Item {
                                 width: root.cellSize
-                                height: 14
+                                height: 16
 
                                 Text {
-                                    font.pixelSize: 8
+                                    font.pixelSize: 9
                                     font.family: "monospace"
                                     color: "#584e51"
                                     visible: {
@@ -242,7 +242,7 @@ Rectangle {
 
             Text {
                 text: qsTr("pi session history")
-                font.pixelSize: 9
+                font.pixelSize: 10
                 font.family: "monospace"
                 color: "#584e51"
             }
@@ -251,7 +251,7 @@ Rectangle {
 
             Text {
                 text: qsTr("less")
-                font.pixelSize: 9
+                font.pixelSize: 10
                 font.family: "monospace"
                 color: "#584e51"
             }
@@ -261,8 +261,8 @@ Rectangle {
                 Repeater {
                     model: 5
                     Rectangle {
-                        width: 9
-                        height: 9
+                        width: 10
+                        height: 10
                         radius: 2
                         color: root.getCellColor(index)
                         border.color: Qt.rgba(1, 1, 1, 0.05)
@@ -273,7 +273,7 @@ Rectangle {
 
             Text {
                 text: qsTr("more")
-                font.pixelSize: 9
+                font.pixelSize: 10
                 font.family: "monospace"
                 color: "#584e51"
             }

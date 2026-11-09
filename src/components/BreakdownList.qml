@@ -33,7 +33,7 @@ Rectangle {
 
             Text {
                 text: root.title.toUpperCase()
-                font.pixelSize: 9
+                font.pixelSize: 10
                 font.bold: true
                 font.family: "monospace"
                 color: "#7c777d"
@@ -43,7 +43,7 @@ Rectangle {
 
             Text {
                 text: root.items.length.toString()
-                font.pixelSize: 9
+                font.pixelSize: 10
                 font.family: "monospace"
                 color: "#584e51"
             }
@@ -61,7 +61,7 @@ Rectangle {
             delegate: Rectangle {
                 id: rowDelegate
                 width: listView.width
-                height: 42
+                height: 48
                 radius: 4
                 color: itemMouse.containsMouse ? "#1c1b1f" : "transparent"
 
@@ -81,17 +81,17 @@ Rectangle {
 
                 RowLayout {
                     anchors.fill: parent
-                    anchors.leftMargin: 8
-                    anchors.rightMargin: 8
+                    anchors.leftMargin: 10
+                    anchors.rightMargin: 10
                     spacing: 8
 
                     ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 1
+                        spacing: 2
 
                         Text {
                             text: modelData.name
-                            font.pixelSize: 11
+                            font.pixelSize: 12
                             font.bold: true
                             font.family: "monospace"
                             color: "#fafcfb"
@@ -101,7 +101,7 @@ Rectangle {
 
                         Text {
                             text: modelData.turns + " turns · " + backend.formatCompact(modelData.tokensTotal) + " tok" + (modelData.tokensReasoning > 0 ? (" · " + backend.formatCompact(modelData.tokensReasoning) + " rsn") : "")
-                            font.pixelSize: 9
+                            font.pixelSize: 10
                             font.family: "monospace"
                             color: "#7c777d"
                             Layout.fillWidth: true
@@ -110,12 +110,12 @@ Rectangle {
                     }
 
                     ColumnLayout {
-                        spacing: 1
+                        spacing: 2
                         Layout.alignment: Qt.AlignRight
 
                         Text {
                             text: "$" + modelData.costUsd.toFixed(4)
-                            font.pixelSize: 11
+                            font.pixelSize: 12
                             font.bold: true
                             font.family: "monospace"
                             color: "#fafcfb"
@@ -124,7 +124,7 @@ Rectangle {
 
                         Text {
                             text: "~$" + Math.round(modelData.costUsd * backend.trmRate).toLocaleString() + " COP"
-                            font.pixelSize: 9
+                            font.pixelSize: 10
                             font.family: "monospace"
                             color: theme.accent
                             Layout.alignment: Qt.AlignRight

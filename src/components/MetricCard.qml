@@ -13,17 +13,17 @@ Rectangle {
     border.color: Qt.rgba(1, 1, 1, 0.05)
     border.width: 1
 
-    implicitHeight: 76
+    implicitHeight: 88
     Layout.fillWidth: true
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 12
-        spacing: 3
+        anchors.margins: 14
+        spacing: 4
 
         Text {
             text: root.title.toUpperCase()
-            font.pixelSize: 9
+            font.pixelSize: 10
             font.bold: true
             font.family: "monospace"
             color: "#7c777d"
@@ -33,7 +33,7 @@ Rectangle {
 
         Text {
             text: root.primaryValue
-            font.pixelSize: 18
+            font.pixelSize: 21
             font.bold: true
             font.family: "monospace"
             color: "#fafcfb"
@@ -43,7 +43,7 @@ Rectangle {
 
         Text {
             text: root.secondaryValue
-            font.pixelSize: 10
+            font.pixelSize: 11
             font.family: "monospace"
             color: "#8e888f"
             visible: text.length > 0
