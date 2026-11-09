@@ -5,6 +5,7 @@
 #include "storage.h"
 #include "trmclient.h"
 #include "theme.h"
+#include "backend.h"
 
 class AiActivityTests : public QObject {
     Q_OBJECT
@@ -14,6 +15,7 @@ private slots:
     void testStorageInitAndParsing();
     void testTrmConversion();
     void testThemeAccentDefault();
+    void testNumberFormatting();
 };
 
 void AiActivityTests::testProjectNameExtraction() {
@@ -97,6 +99,26 @@ void AiActivityTests::testThemeAccentDefault() {
     // Should have valid default accent and foreground
     QVERIFY(theme.accent().startsWith("#"));
     QVERIFY(theme.accentForeground() == "black" || theme.accentForeground() == "white");
+}
+
+void AiActivityTests::testNumberFormatting() {
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+
+    Backend backend(tempDir.path() + "/test_fmt.db", tempDir.path());
+
+    // Test compact formatting without scientific notation
+    QCOMPARE(backend.formatCompact(363073000), QString("363.07M"));
+    QCOMPARE(backend.formatCompact(1504500), QString("1.50M"));
+    QCOMPARE(backend.formatCompact(18512000), QString("18.51M"));
+    QCOMPARE(backend.formatCompact(1250000000), QString("1.25B"));
+    QCOMPARE(backend.formatCompact(5400), QString("5.4k"));
+    QCOMPARE(backend.formatCompact(42), QString("42"));
+
+    // Ensure formatNumber produces separated numbers, not e+08
+    QString formatted = backend.formatNumber(363073000);
+    QVERIFY(!formatted.contains("e+"));
+    QVERIFY(formatted.contains("363"));
 }
 
 QTEST_MAIN(AiActivityTests)

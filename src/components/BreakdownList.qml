@@ -105,7 +105,7 @@ Rectangle {
                         Layout.fillWidth: true
 
                         Text {
-                            text: modelData.turns + " " + qsTr("turns") + " · " + modelData.tokensTotal.toLocaleString() + " tokens" + (modelData.tokensReasoning > 0 ? (" (" + modelData.tokensReasoning.toLocaleString() + " thinking)") : "")
+                            text: modelData.turns + " " + qsTr("turns") + " · " + backend.formatCompact(modelData.tokensTotal) + " tokens" + (modelData.tokensReasoning > 0 ? (" (" + backend.formatCompact(modelData.tokensReasoning) + " thinking)") : "")
                             font.pixelSize: 10
                             color: "#8b949e"
                             Layout.fillWidth: true

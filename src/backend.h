@@ -61,6 +61,9 @@ public:
 
     Q_INVOKABLE void refresh();
     Q_INVOKABLE void syncTrm();
+    Q_INVOKABLE QString formatTokens(qint64 count) const;
+    Q_INVOKABLE QString formatCompact(qint64 count) const;
+    Q_INVOKABLE QString formatNumber(qint64 count) const;
 
 signals:
     void dataChanged();

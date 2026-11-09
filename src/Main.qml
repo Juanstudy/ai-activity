@@ -193,22 +193,22 @@ ApplicationWindow {
 
             MetricCard {
                 title: qsTr("Total Tokens")
-                primaryValue: backend.totalTokens.toLocaleString()
-                secondaryValue: (backend.inputTokens / 1000).toFixed(1) + "k in · " + (backend.outputTokens / 1000).toFixed(1) + "k out"
+                primaryValue: backend.formatCompact(backend.totalTokens)
+                secondaryValue: backend.formatCompact(backend.inputTokens) + " in · " + backend.formatCompact(backend.outputTokens) + " out (" + backend.formatNumber(backend.totalTokens) + ")"
                 accentColor: "#3fb950"
             }
 
             MetricCard {
                 title: qsTr("Thinking Tokens")
-                primaryValue: backend.thinkingTokens.toLocaleString()
-                secondaryValue: backend.totalTokens > 0 ? ((backend.thinkingTokens * 100.0 / backend.totalTokens).toFixed(1) + "% of total") : "0%"
+                primaryValue: backend.formatCompact(backend.thinkingTokens)
+                secondaryValue: backend.totalTokens > 0 ? ((backend.thinkingTokens * 100.0 / backend.totalTokens).toFixed(1) + "% · " + backend.formatNumber(backend.thinkingTokens) + " tokens") : "0%"
                 accentColor: "#bc8cff"
             }
 
             MetricCard {
                 title: qsTr("Activity Volume")
-                primaryValue: backend.totalTurns.toLocaleString() + " " + qsTr("turns")
-                secondaryValue: backend.totalSessions + " " + qsTr("sessions")
+                primaryValue: backend.formatNumber(backend.totalTurns) + " " + qsTr("turns")
+                secondaryValue: backend.formatNumber(backend.totalSessions) + " " + qsTr("sessions")
                 accentColor: "#d29922"
             }
         }

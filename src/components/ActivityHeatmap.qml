@@ -105,7 +105,7 @@ Rectangle {
             Item { Layout.fillWidth: true }
 
             Text {
-                text: root.hoveredDay ? (root.hoveredDay.date + " · " + root.hoveredDay.turns + " turns · $" + root.hoveredDay.costUsd.toFixed(4) + " USD (~$" + Math.round(root.hoveredDay.costUsd * backend.trmRate).toLocaleString() + " COP)") : qsTr("Hover over a day for details")
+                text: root.hoveredDay ? (root.hoveredDay.date + " · " + root.hoveredDay.turns + " turns · $" + root.hoveredDay.costUsd.toFixed(4) + " USD (~$" + Math.round(root.hoveredDay.costUsd * backend.trmRate).toLocaleString() + " COP) · " + backend.formatCompact(root.hoveredDay.tokensTotal) + " tokens") : qsTr("Hover over a day for details")
                 font.pixelSize: 11
                 color: root.hoveredDay ? theme.accent : "#8b949e"
             }

@@ -102,3 +102,28 @@ void Backend::refresh() {
 void Backend::syncTrm() {
     m_trm.syncRate();
 }
+
+QString Backend::formatNumber(qint64 count) const {
+    return QLocale().toString(count);
+}
+
+QString Backend::formatCompact(qint64 count) const {
+    const double val = static_cast<double>(count);
+    if (std::abs(val) >= 1000000000.0) {
+        return QString::number(val / 1000000000.0, 'f', 2) + "B";
+    }
+    if (std::abs(val) >= 1000000.0) {
+        return QString::number(val / 1000000.0, 'f', 2) + "M";
+    }
+    if (std::abs(val) >= 1000.0) {
+        return QString::number(val / 1000.0, 'f', 1) + "k";
+    }
+    return QString::number(count);
+}
+
+QString Backend::formatTokens(qint64 count) const {
+    if (std::abs(count) >= 1000000) {
+        return formatCompact(count) + " (" + formatNumber(count) + ")";
+    }
+    return formatNumber(count);
+}
