@@ -9,11 +9,11 @@ ApplicationWindow {
     id: window
     visible: true
     width: 1140
-    height: 780
+    height: 760
     minimumWidth: 880
     minimumHeight: 620
-    title: qsTr("AI Activity — Omarchy")
-    color: "#0d1117"
+    title: "ai-activity"
+    color: "#0c0b0c"
 
     Material.theme: Material.Dark
     Material.accent: theme.accent
@@ -23,6 +23,17 @@ ApplicationWindow {
         sequence: "q"
         context: Qt.ApplicationShortcut
         onActivated: Qt.quit()
+    }
+
+    Shortcut {
+        sequence: "Escape"
+        context: Qt.ApplicationShortcut
+        onActivated: {
+            if (helpDialog.visible)
+                helpDialog.close()
+            else
+                Qt.quit()
+        }
     }
 
     Shortcut {
@@ -45,249 +56,298 @@ ApplicationWindow {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 16
-        spacing: 12
+        anchors.margins: 14
+        spacing: 10
 
-        // Top Header Row
+        // ── TOP HEADER BAR ──
         RowLayout {
             Layout.fillWidth: true
             spacing: 12
 
+            // App Identity
             RowLayout {
                 spacing: 8
-                Rectangle {
-                    width: 28
-                    height: 28
-                    radius: Math.min(6, theme.radius)
+                Text {
+                    text: "󰄧"
+                    font.pixelSize: 14
                     color: theme.accent
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: "󰄧"
-                        font.pixelSize: 16
-                        color: theme.accentForeground
-                    }
                 }
 
-                ColumnLayout {
-                    spacing: 0
-                    Text {
-                        text: "AI Activity"
-                        font.pixelSize: 15
-                        font.bold: true
-                        color: "#f0f6fc"
-                    }
-                    Text {
-                        text: backend.lastSyncStatus
-                        font.pixelSize: 10
-                        color: "#8b949e"
-                    }
+                Text {
+                    text: "ai-activity"
+                    font.pixelSize: 13
+                    font.bold: true
+                    font.family: "monospace"
+                    color: "#fafcfb"
+                }
+
+                Text {
+                    text: "· " + backend.lastSyncStatus
+                    font.pixelSize: 10
+                    font.family: "monospace"
+                    color: "#584e51"
                 }
             }
 
             Item { Layout.fillWidth: true }
 
-            // Range buttons (1-8)
+            // Range Segmented Pill
             TimeRangeBar {
                 id: rangeBar
             }
 
-            // TRM Badge (clickable to sync)
-            Rectangle {
-                implicitHeight: 28
-                implicitWidth: trmText.implicitWidth + 16
-                radius: Math.min(6, theme.radius)
-                color: "#161b22"
-                border.color: "#30363d"
-                border.width: 1
+            Item { Layout.fillWidth: true }
 
-                RowLayout {
-                    anchors.centerIn: parent
-                    spacing: 4
+            // TRM Pill & Actions
+            RowLayout {
+                spacing: 6
+
+                Rectangle {
+                    implicitHeight: 26
+                    implicitWidth: trmText.implicitWidth + 16
+                    radius: 13
+                    color: "#161517"
+                    border.color: "rgba(255, 255, 255, 0.06)"
+                    border.width: 1
 
                     Text {
                         id: trmText
+                        anchors.centerIn: parent
                         text: "1 USD = " + Math.round(backend.trmRate).toLocaleString() + " COP"
-                        font.pixelSize: 11
+                        font.pixelSize: 10
+                        font.family: "monospace"
                         color: theme.accent
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: backend.syncTrm()
                     }
                 }
 
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    ToolTip.visible: containsMouse
-                    ToolTip.text: qsTr("Click to refresh TRM rate (Auto-sync)")
-                    onClicked: backend.syncTrm()
-                }
-            }
-
-            // Refresh button
-            Button {
-                text: "↻"
-                implicitHeight: 28
-                implicitWidth: 32
-                font.bold: true
-                flat: true
-                ToolTip.visible: hovered
-                ToolTip.text: qsTr("Refresh session data (R)")
-                onClicked: backend.refresh()
-
-                background: Rectangle {
-                    radius: Math.min(6, theme.radius)
-                    color: parent.hovered ? "#222730" : "#161b22"
-                    border.color: "#30363d"
+                Rectangle {
+                    implicitHeight: 26
+                    implicitWidth: 26
+                    radius: 13
+                    color: refMouse.containsMouse ? "#201e22" : "#161517"
+                    border.color: "rgba(255, 255, 255, 0.06)"
                     border.width: 1
-                }
-                contentItem: Text {
-                    text: parent.text
-                    color: "#f0f6fc"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-            }
 
-            // Help button
-            Button {
-                text: "?"
-                implicitHeight: 28
-                implicitWidth: 28
-                flat: true
-                ToolTip.visible: hovered
-                ToolTip.text: qsTr("Shortcuts (?)")
-                onClicked: helpDialog.open()
+                    Text {
+                        anchors.centerIn: parent
+                        text: "↻"
+                        font.pixelSize: 12
+                        color: "#fafcfb"
+                    }
 
-                background: Rectangle {
-                    radius: Math.min(6, theme.radius)
-                    color: parent.hovered ? "#222730" : "#161b22"
-                    border.color: "#30363d"
+                    MouseArea {
+                        id: refMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: backend.refresh()
+                    }
+                }
+
+                Rectangle {
+                    implicitHeight: 26
+                    implicitWidth: 26
+                    radius: 13
+                    color: helpMouse.containsMouse ? "#201e22" : "#161517"
+                    border.color: "rgba(255, 255, 255, 0.06)"
                     border.width: 1
-                }
-                contentItem: Text {
-                    text: parent.text
-                    color: "#8b949e"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "?"
+                        font.pixelSize: 11
+                        font.bold: true
+                        color: "#7c777d"
+                    }
+
+                    MouseArea {
+                        id: helpMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: helpDialog.open()
+                    }
                 }
             }
         }
 
-        // Metrics Row
+        // ── METRICS KPI ROW ──
         RowLayout {
             Layout.fillWidth: true
-            spacing: 10
+            spacing: 8
 
             MetricCard {
-                title: qsTr("Total Cost")
-                primaryValue: "$" + backend.totalCostUsd.toFixed(4) + " USD"
+                title: "total cost"
+                primaryValue: "$" + backend.totalCostUsd.toFixed(4)
                 secondaryValue: "~$" + Math.round(backend.totalCostCop).toLocaleString() + " COP"
-                accentColor: theme.accent
             }
 
             MetricCard {
-                title: qsTr("Average / Turn")
-                primaryValue: "$" + backend.avgCostPerTurnUsd.toFixed(4) + " USD"
+                title: "avg / turn"
+                primaryValue: "$" + backend.avgCostPerTurnUsd.toFixed(4)
                 secondaryValue: "~$" + Math.round(backend.avgCostPerTurnCop).toLocaleString() + " COP"
-                accentColor: "#58a6ff"
             }
 
             MetricCard {
-                title: qsTr("Total Tokens")
+                title: "tokens"
                 primaryValue: backend.formatCompact(backend.totalTokens)
-                secondaryValue: backend.formatCompact(backend.inputTokens) + " in · " + backend.formatCompact(backend.outputTokens) + " out (" + backend.formatNumber(backend.totalTokens) + ")"
-                accentColor: "#3fb950"
+                secondaryValue: backend.formatCompact(backend.inputTokens) + " in · " + backend.formatCompact(backend.outputTokens) + " out"
             }
 
             MetricCard {
-                title: qsTr("Thinking Tokens")
+                title: "reasoning"
                 primaryValue: backend.formatCompact(backend.thinkingTokens)
-                secondaryValue: backend.totalTokens > 0 ? ((backend.thinkingTokens * 100.0 / backend.totalTokens).toFixed(1) + "% · " + backend.formatNumber(backend.thinkingTokens) + " tokens") : "0%"
-                accentColor: "#bc8cff"
+                secondaryValue: backend.totalTokens > 0 ? ((backend.thinkingTokens * 100.0 / backend.totalTokens).toFixed(1) + "% of total") : "0%"
             }
 
             MetricCard {
-                title: qsTr("Activity Volume")
-                primaryValue: backend.formatNumber(backend.totalTurns) + " " + qsTr("turns")
-                secondaryValue: backend.formatNumber(backend.totalSessions) + " " + qsTr("sessions")
-                accentColor: "#d29922"
+                title: "activity"
+                primaryValue: backend.formatNumber(backend.totalTurns) + " turns"
+                secondaryValue: backend.formatNumber(backend.totalSessions) + " sessions"
             }
         }
 
-        // Activity Heatmap (GitHub Style)
+        // ── ACTIVITY HEATMAP ──
         ActivityHeatmap {
             id: heatmap
         }
 
-        // Bottom Breakdown Section: 3 Columns
+        // ── BREAKDOWN PANELS ──
         RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            spacing: 10
+            spacing: 8
 
             BreakdownList {
-                title: qsTr("Projects / Workspaces")
+                title: "projects"
                 items: backend.projectBreakdown
-                accentColor: theme.accent
             }
 
             BreakdownList {
-                title: qsTr("Models & Reasoning")
+                title: "models"
                 items: backend.modelBreakdown
-                accentColor: "#58a6ff"
             }
 
             BreakdownList {
-                title: qsTr("Agents & Subagents")
+                title: "agents"
                 items: backend.agentBreakdown
-                accentColor: "#bc8cff"
+            }
+        }
+
+        // ── BOTTOM OMARCHY FOOTER ──
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.topMargin: 2
+            spacing: 8
+
+            Text {
+                text: "󰄧 ai-activity"
+                font.pixelSize: 10
+                font.family: "monospace"
+                color: "#584e51"
+            }
+
+            Text {
+                text: "|"
+                font.pixelSize: 10
+                color: "#3a363d"
+            }
+
+            Text {
+                text: "1-8 range · R refresh · ? shortcuts"
+                font.pixelSize: 10
+                font.family: "monospace"
+                color: "#584e51"
+            }
+
+            Item { Layout.fillWidth: true }
+
+            RowLayout {
+                spacing: 6
+
+                Text {
+                    text: "Close"
+                    font.pixelSize: 10
+                    font.family: "monospace"
+                    color: "#584e51"
+                }
+
+                Rectangle {
+                    implicitWidth: 32
+                    implicitHeight: 18
+                    radius: 4
+                    color: "#18171a"
+                    border.color: "rgba(255, 255, 255, 0.08)"
+                    border.width: 1
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "Esc"
+                        font.pixelSize: 9
+                        font.bold: true
+                        font.family: "monospace"
+                        color: theme.accent
+                    }
+                }
             }
         }
     }
 
-    // Keyboard Shortcuts Dialog
+    // ── SHORTCUTS DIALOG ──
     Dialog {
         id: helpDialog
         anchors.centerIn: parent
         modal: true
-        title: qsTr("Keyboard Shortcuts")
+        title: "shortcuts"
         standardButtons: Dialog.Close
 
         background: Rectangle {
-            color: "#161b22"
-            radius: Math.min(8, theme.radius)
-            border.color: "#30363d"
+            color: "#141315"
+            radius: Math.max(8, Math.min(14, theme.radius))
+            border.color: "rgba(255, 255, 255, 0.08)"
             border.width: 1
         }
 
         ColumnLayout {
-            spacing: 8
+            spacing: 10
             Repeater {
                 model: [
-                    { key: "1 - 8", desc: qsTr("Switch time range (5h, 12h, 24h, 7d, 30d, 6m, 1y, All)") },
-                    { key: "R", desc: qsTr("Refresh session data and reload logs") },
-                    { key: "?", desc: qsTr("Toggle this shortcuts dialog") },
-                    { key: "Q", desc: qsTr("Quit application") }
+                    { key: "1 - 8", desc: "Switch range (5h, 12h, 24h, 7d, 30d, 6m, 1y, all)" },
+                    { key: "R", desc: "Reload logs and refresh session data" },
+                    { key: "?", desc: "Toggle keyboard shortcuts help" },
+                    { key: "Esc / Q", desc: "Quit application" }
                 ]
 
                 RowLayout {
                     spacing: 14
                     Rectangle {
-                        implicitWidth: 60
-                        implicitHeight: 24
-                        color: "#21262d"
+                        implicitWidth: 64
+                        implicitHeight: 22
+                        color: "#1c1b1f"
                         radius: 4
+                        border.color: "rgba(255, 255, 255, 0.06)"
+                        border.width: 1
+
                         Text {
                             anchors.centerIn: parent
                             text: modelData.key
                             font.bold: true
-                            font.pixelSize: 11
+                            font.pixelSize: 10
+                            font.family: "monospace"
                             color: theme.accent
                         }
                     }
                     Text {
                         text: modelData.desc
-                        font.pixelSize: 12
-                        color: "#c9d1d9"
+                        font.pixelSize: 11
+                        font.family: "monospace"
+                        color: "#fafcfb"
                     }
                 }
             }

@@ -1,6 +1,4 @@
 import QtQuick
-import QtQuick.Controls
-import QtQuick.Controls.Material
 import QtQuick.Layouts
 
 Rectangle {
@@ -9,56 +7,45 @@ Rectangle {
     property string title: ""
     property string primaryValue: ""
     property string secondaryValue: ""
-    property string iconGlyph: ""
-    property color accentColor: theme.accent
 
-    color: "#161b22"
-    radius: Math.min(8, theme.radius)
-    border.color: "#30363d"
+    color: "#141315"
+    radius: Math.max(6, Math.min(10, theme.radius))
+    border.color: "rgba(255, 255, 255, 0.05)"
     border.width: 1
 
-    implicitHeight: 88
+    implicitHeight: 76
     Layout.fillWidth: true
 
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 12
-        spacing: 4
+        spacing: 3
 
-        RowLayout {
+        Text {
+            text: root.title.toUpperCase()
+            font.pixelSize: 9
+            font.bold: true
+            font.family: "monospace"
+            color: "#7c777d"
             Layout.fillWidth: true
-            spacing: 6
-
-            Text {
-                text: root.title.toUpperCase()
-                font.pixelSize: 10
-                font.bold: true
-                color: "#8b949e"
-                Layout.fillWidth: true
-                elide: Text.ElideRight
-            }
-
-            Rectangle {
-                width: 6
-                height: 6
-                radius: 3
-                color: root.accentColor
-            }
+            elide: Text.ElideRight
         }
 
         Text {
             text: root.primaryValue
             font.pixelSize: 18
             font.bold: true
-            color: "#f0f6fc"
+            font.family: "monospace"
+            color: "#fafcfb"
             elide: Text.ElideRight
             Layout.fillWidth: true
         }
 
         Text {
             text: root.secondaryValue
-            font.pixelSize: 11
-            color: "#8b949e"
+            font.pixelSize: 10
+            font.family: "monospace"
+            color: "#8e888f"
             visible: text.length > 0
             elide: Text.ElideRight
             Layout.fillWidth: true

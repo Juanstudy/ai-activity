@@ -1,16 +1,15 @@
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Controls.Material
 import QtQuick.Layouts
 
 Rectangle {
     id: root
 
-    color: "#161b22"
-    radius: Math.min(8, theme.radius)
-    border.color: "#30363d"
+    color: "#141315"
+    radius: Math.max(6, Math.min(10, theme.radius))
+    border.color: "rgba(255, 255, 255, 0.05)"
     border.width: 1
-    implicitHeight: 180
+    implicitHeight: 168
     Layout.fillWidth: true
 
     property var dayLookup: ({})
@@ -40,16 +39,14 @@ Rectangle {
 
     Component.onCompleted: rebuildLookup()
 
-    // 53 weeks x 7 days
     readonly property int weeksCount: 53
     readonly property int cellSize: 11
     readonly property int cellSpacing: 3
 
     readonly property date today: new Date()
-    // Calculate start date: 52 weeks ago, aligned to Monday
     readonly property date startDate: {
         var d = new Date()
-        var dayOfWeek = (d.getDay() + 6) % 7 // Monday = 0, Sunday = 6
+        var dayOfWeek = (d.getDay() + 6) % 7 // Monday = 0
         d.setDate(d.getDate() - (52 * 7 + dayOfWeek))
         d.setHours(0, 0, 0, 0)
         return d
@@ -78,82 +75,86 @@ Rectangle {
     }
 
     function getCellColor(level) {
-        if (level === 0) return "#1c2128"
+        if (level === 0) return "#1b1a1d"
         var accent = theme.accent
-        if (level === 1) return Qt.rgba(accent.r, accent.g, accent.b, 0.3)
-        if (level === 2) return Qt.rgba(accent.r, accent.g, accent.b, 0.55)
-        if (level === 3) return Qt.rgba(accent.r, accent.g, accent.b, 0.8)
+        if (level === 1) return Qt.rgba(accent.r, accent.g, accent.b, 0.25)
+        if (level === 2) return Qt.rgba(accent.r, accent.g, accent.b, 0.50)
+        if (level === 3) return Qt.rgba(accent.r, accent.g, accent.b, 0.75)
         return accent
     }
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 14
+        anchors.margins: 12
         spacing: 8
 
-        // Header: Title and hovered summary
+        // Header: Title and Hover Info
         RowLayout {
             Layout.fillWidth: true
 
             Text {
-                text: qsTr("AI ACTIVITY HEATMAP")
-                font.pixelSize: 11
+                text: qsTr("ACTIVITY HEATMAP")
+                font.pixelSize: 9
                 font.bold: true
-                color: "#8b949e"
+                font.family: "monospace"
+                color: "#7c777d"
             }
 
             Item { Layout.fillWidth: true }
 
             Text {
-                text: root.hoveredDay ? (root.hoveredDay.date + " · " + root.hoveredDay.turns + " turns · $" + root.hoveredDay.costUsd.toFixed(4) + " USD (~$" + Math.round(root.hoveredDay.costUsd * backend.trmRate).toLocaleString() + " COP) · " + backend.formatCompact(root.hoveredDay.tokensTotal) + " tokens") : qsTr("Hover over a day for details")
-                font.pixelSize: 11
-                color: root.hoveredDay ? theme.accent : "#8b949e"
+                text: root.hoveredDay
+                    ? (root.hoveredDay.date + " · " + root.hoveredDay.turns + " turns · $" + root.hoveredDay.costUsd.toFixed(4) + " USD (~$" + Math.round(root.hoveredDay.costUsd * backend.trmRate).toLocaleString() + " COP) · " + backend.formatCompact(root.hoveredDay.tokensTotal) + " tok")
+                    : qsTr("hover a day for stats")
+                font.pixelSize: 10
+                font.family: "monospace"
+                color: root.hoveredDay ? theme.accent : "#584e51"
             }
         }
 
-        // Grid container
+        // Grid Container
         RowLayout {
             Layout.fillWidth: true
             Layout.alignment: Qt.AlignHCenter
             spacing: 6
 
-            // Day labels (Mon, Wed, Fri)
+            // Day labels
             Column {
                 spacing: root.cellSpacing
                 Layout.alignment: Qt.AlignTop
-                Item { width: 24; height: 16 } // space for month headers
+                Item { width: 22; height: 14 }
 
                 Repeater {
                     model: [
-                        { label: qsTr("Mon"), visible: true },
-                        { label: "", visible: false },
-                        { label: qsTr("Wed"), visible: true },
-                        { label: "", visible: false },
-                        { label: qsTr("Fri"), visible: true },
-                        { label: "", visible: false },
-                        { label: "", visible: false }
+                        { label: "Mon", show: true },
+                        { label: "", show: false },
+                        { label: "Wed", show: true },
+                        { label: "", show: false },
+                        { label: "Fri", show: true },
+                        { label: "", show: false },
+                        { label: "", show: false }
                     ]
 
                     Item {
-                        width: 24
+                        width: 22
                         height: root.cellSize
 
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
                             text: modelData.label
-                            font.pixelSize: 9
-                            color: "#8b949e"
-                            visible: modelData.visible
+                            font.pixelSize: 8
+                            font.family: "monospace"
+                            color: "#584e51"
+                            visible: modelData.show
                         }
                     }
                 }
             }
 
-            // Weeks columns
+            // Weeks grid
             Flickable {
-                id: gridFlickable
                 Layout.fillWidth: true
-                Layout.preferredHeight: 16 + (root.cellSize + root.cellSpacing) * 7
+                Layout.preferredHeight: 14 + (root.cellSize + root.cellSpacing) * 7
                 contentWidth: root.weeksCount * (root.cellSize + root.cellSpacing)
                 contentHeight: height
                 clip: true
@@ -170,32 +171,29 @@ Rectangle {
                             readonly property int weekIdx: index
                             spacing: root.cellSpacing
 
-                            // Month header label (only show when 1st of month falls in this week)
                             Item {
                                 width: root.cellSize
-                                height: 16
+                                height: 14
 
                                 Text {
-                                    id: monthText
-                                    font.pixelSize: 9
-                                    color: "#8b949e"
+                                    font.pixelSize: 8
+                                    font.family: "monospace"
+                                    color: "#584e51"
                                     visible: {
                                         var d = root.getDateForCell(weekIdx, 0)
                                         return d.getDate() <= 7
                                     }
                                     text: {
                                         var d = root.getDateForCell(weekIdx, 0)
-                                        return d.toLocaleString(Qt.locale(), "MMM")
+                                        return d.toLocaleString(Qt.locale(), "MMM").toLowerCase()
                                     }
                                 }
                             }
 
-                            // 7 Days
                             Repeater {
                                 model: 7
 
                                 Rectangle {
-                                    id: dayCell
                                     readonly property int dayIdx: index
                                     readonly property date cellDate: root.getDateForCell(weekCol.weekIdx, dayIdx)
                                     readonly property string dateStr: root.formatDate(cellDate)
@@ -206,10 +204,10 @@ Rectangle {
                                     width: root.cellSize
                                     height: root.cellSize
                                     radius: 2
-                                    opacity: isFuture ? 0.2 : 1.0
+                                    opacity: isFuture ? 0.15 : 1.0
 
                                     color: root.getCellColor(level)
-                                    border.color: isFuture ? "transparent" : (level === 0 ? "#272e39" : Qt.darker(color, 1.2))
+                                    border.color: isFuture ? "transparent" : (level === 0 ? "rgba(255, 255, 255, 0.03)" : "rgba(255, 255, 255, 0.08)")
                                     border.width: 1
 
                                     MouseArea {
@@ -237,23 +235,25 @@ Rectangle {
             }
         }
 
-        // Footer: Legend "Less ... More"
+        // Footer: Legend
         RowLayout {
             Layout.fillWidth: true
-            spacing: 8
+            spacing: 6
 
             Text {
-                text: qsTr("Pi Agent turns tracked locally")
-                font.pixelSize: 10
-                color: "#6e7681"
+                text: qsTr("pi session history")
+                font.pixelSize: 9
+                font.family: "monospace"
+                color: "#584e51"
             }
 
             Item { Layout.fillWidth: true }
 
             Text {
-                text: qsTr("Less")
-                font.pixelSize: 10
-                color: "#8b949e"
+                text: qsTr("less")
+                font.pixelSize: 9
+                font.family: "monospace"
+                color: "#584e51"
             }
 
             Row {
@@ -261,20 +261,21 @@ Rectangle {
                 Repeater {
                     model: 5
                     Rectangle {
-                        width: 10
-                        height: 10
+                        width: 9
+                        height: 9
                         radius: 2
                         color: root.getCellColor(index)
-                        border.color: index === 0 ? "#272e39" : Qt.darker(color, 1.2)
+                        border.color: "rgba(255, 255, 255, 0.05)"
                         border.width: 1
                     }
                 }
             }
 
             Text {
-                text: qsTr("More")
-                font.pixelSize: 10
-                color: "#8b949e"
+                text: qsTr("more")
+                font.pixelSize: 9
+                font.family: "monospace"
+                color: "#584e51"
             }
         }
     }
