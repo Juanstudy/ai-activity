@@ -16,6 +16,7 @@ private slots:
     void testTrmConversion();
     void testThemeAccentDefault();
     void testNumberFormatting();
+    void testRangeSwitching();
 };
 
 void AiActivityTests::testProjectNameExtraction() {
@@ -119,6 +120,28 @@ void AiActivityTests::testNumberFormatting() {
     QString formatted = backend.formatNumber(363073000);
     QVERIFY(!formatted.contains("e+"));
     QVERIFY(formatted.contains("363"));
+}
+
+void AiActivityTests::testRangeSwitching() {
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+
+    Backend backend(tempDir.path() + "/test_range.db", tempDir.path());
+    QCOMPARE(backend.currentRange(), QString("7d"));
+
+    // Test Q_INVOKABLE setRange
+    backend.setRange("5h");
+    QCOMPARE(backend.currentRange(), QString("5h"));
+
+    backend.setRange("30d");
+    QCOMPARE(backend.currentRange(), QString("30d"));
+
+    backend.setRange("all");
+    QCOMPARE(backend.currentRange(), QString("all"));
+
+    // Test Q_PROPERTY write
+    backend.setProperty("currentRange", "12h");
+    QCOMPARE(backend.currentRange(), QString("12h"));
 }
 
 QTEST_MAIN(AiActivityTests)

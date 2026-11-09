@@ -36,7 +36,7 @@ public:
     ~Backend() override = default;
 
     QString currentRange() const { return m_currentRange; }
-    void setRange(const QString &range);
+    Q_INVOKABLE void setRange(const QString &range);
 
     double totalCostUsd() const { return m_summary.totalCostUsd; }
     double totalCostCop() const;

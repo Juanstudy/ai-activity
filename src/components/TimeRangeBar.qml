@@ -45,7 +45,13 @@ RowLayout {
                 verticalAlignment: Text.AlignVCenter
             }
 
-            onClicked: backend.setRange(modelData.id)
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    backend.setRange(modelData.id)
+                }
+            }
 
             Shortcut {
                 sequence: (index + 1).toString()
