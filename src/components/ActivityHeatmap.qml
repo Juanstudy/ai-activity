@@ -7,7 +7,7 @@ Rectangle {
 
     color: "#141315"
     radius: Math.max(6, Math.min(10, theme.radius))
-    border.color: "rgba(255, 255, 255, 0.05)"
+    border.color: Qt.rgba(1, 1, 1, 0.05)
     border.width: 1
     implicitHeight: 168
     Layout.fillWidth: true
@@ -207,7 +207,7 @@ Rectangle {
                                     opacity: isFuture ? 0.15 : 1.0
 
                                     color: root.getCellColor(level)
-                                    border.color: isFuture ? "transparent" : (level === 0 ? "rgba(255, 255, 255, 0.03)" : "rgba(255, 255, 255, 0.08)")
+                                    border.color: isFuture ? "transparent" : (level === 0 ? Qt.rgba(1, 1, 1, 0.03) : Qt.rgba(1, 1, 1, 0.08))
                                     border.width: 1
 
                                     MouseArea {
@@ -265,7 +265,7 @@ Rectangle {
                         height: 9
                         radius: 2
                         color: root.getCellColor(index)
-                        border.color: "rgba(255, 255, 255, 0.05)"
+                        border.color: Qt.rgba(1, 1, 1, 0.05)
                         border.width: 1
                     }
                 }

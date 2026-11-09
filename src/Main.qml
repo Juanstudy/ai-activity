@@ -107,7 +107,7 @@ ApplicationWindow {
                     implicitWidth: trmText.implicitWidth + 16
                     radius: 13
                     color: "#161517"
-                    border.color: "rgba(255, 255, 255, 0.06)"
+                    border.color: Qt.rgba(1, 1, 1, 0.06)
                     border.width: 1
 
                     Text {
@@ -131,7 +131,7 @@ ApplicationWindow {
                     implicitWidth: 26
                     radius: 13
                     color: refMouse.containsMouse ? "#201e22" : "#161517"
-                    border.color: "rgba(255, 255, 255, 0.06)"
+                    border.color: Qt.rgba(1, 1, 1, 0.06)
                     border.width: 1
 
                     Text {
@@ -155,7 +155,7 @@ ApplicationWindow {
                     implicitWidth: 26
                     radius: 13
                     color: helpMouse.containsMouse ? "#201e22" : "#161517"
-                    border.color: "rgba(255, 255, 255, 0.06)"
+                    border.color: Qt.rgba(1, 1, 1, 0.06)
                     border.width: 1
 
                     Text {
@@ -283,7 +283,7 @@ ApplicationWindow {
                     implicitHeight: 18
                     radius: 4
                     color: "#18171a"
-                    border.color: "rgba(255, 255, 255, 0.08)"
+                    border.color: Qt.rgba(1, 1, 1, 0.08)
                     border.width: 1
 
                     Text {
@@ -310,7 +310,7 @@ ApplicationWindow {
         background: Rectangle {
             color: "#141315"
             radius: Math.max(8, Math.min(14, theme.radius))
-            border.color: "rgba(255, 255, 255, 0.08)"
+            border.color: Qt.rgba(1, 1, 1, 0.08)
             border.width: 1
         }
 
@@ -331,7 +331,7 @@ ApplicationWindow {
                         implicitHeight: 22
                         color: "#1c1b1f"
                         radius: 4
-                        border.color: "rgba(255, 255, 255, 0.06)"
+                        border.color: Qt.rgba(1, 1, 1, 0.06)
                         border.width: 1
 
                         Text {

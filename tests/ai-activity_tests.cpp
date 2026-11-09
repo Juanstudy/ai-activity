@@ -1,6 +1,8 @@
 #include <QtTest>
 #include <QTemporaryDir>
 #include <QFile>
+#include <QQmlApplicationEngine>
+#include <QQmlContext>
 
 #include "storage.h"
 #include "trmclient.h"
@@ -17,6 +19,7 @@ private slots:
     void testThemeAccentDefault();
     void testNumberFormatting();
     void testRangeSwitching();
+    void testQmlLoadsCleanly();
 };
 
 void AiActivityTests::testProjectNameExtraction() {
@@ -142,6 +145,21 @@ void AiActivityTests::testRangeSwitching() {
     // Test Q_PROPERTY write
     backend.setProperty("currentRange", "12h");
     QCOMPARE(backend.currentRange(), QString("12h"));
+}
+
+void AiActivityTests::testQmlLoadsCleanly() {
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+
+    Theme theme(tempDir.path());
+    Backend backend(tempDir.path() + "/test_qml.db", tempDir.path());
+
+    QQmlApplicationEngine engine;
+    engine.rootContext()->setContextProperty("theme", &theme);
+    engine.rootContext()->setContextProperty("backend", &backend);
+
+    engine.load(QUrl("qrc:/Main.qml"));
+    QVERIFY2(!engine.rootObjects().isEmpty(), "QQmlApplicationEngine failed to load qrc:/Main.qml");
 }
 
 QTEST_MAIN(AiActivityTests)

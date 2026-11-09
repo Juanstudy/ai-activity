@@ -8,7 +8,7 @@ Rectangle {
     implicitWidth: rowLayout.implicitWidth + 8
     radius: 16
     color: "#161517"
-    border.color: "rgba(255, 255, 255, 0.07)"
+    border.color: Qt.rgba(1, 1, 1, 0.07)
     border.width: 1
 
     readonly property var ranges: [
@@ -35,7 +35,7 @@ Rectangle {
                 implicitHeight: 24
                 implicitWidth: textItem.implicitWidth + 14
                 radius: 12
-                color: backend.currentRange === modelData.id ? theme.accent : (mouseArea.containsMouse ? "rgba(255, 255, 255, 0.05)" : "transparent")
+                color: backend.currentRange === modelData.id ? theme.accent : (mouseArea.containsMouse ? Qt.rgba(1, 1, 1, 0.05) : "transparent")
 
                 Behavior on color {
                     ColorAnimation { duration: 120 }

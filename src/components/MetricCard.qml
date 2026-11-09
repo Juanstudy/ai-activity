@@ -10,7 +10,7 @@ Rectangle {
 
     color: "#141315"
     radius: Math.max(6, Math.min(10, theme.radius))
-    border.color: "rgba(255, 255, 255, 0.05)"
+    border.color: Qt.rgba(1, 1, 1, 0.05)
     border.width: 1
 
     implicitHeight: 76

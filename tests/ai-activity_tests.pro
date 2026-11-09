@@ -18,3 +18,5 @@ SOURCES += \
     ../src/theme.cpp \
     ../src/backend.cpp \
     ai-activity_tests.cpp
+
+RESOURCES += ../src/resources.qrc
