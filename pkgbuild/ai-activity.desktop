@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=AI Activity
+Comment=Monitor AI usage, costs in USD and COP, and activity heatmap
+Exec=ai-activity
+Icon=ai-activity
+Terminal=false
+Type=Application
+Categories=Development;Utility;System;
+StartupWMClass=ai-activity

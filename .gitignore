@@ -1,0 +1,9 @@
+build/
+Makefile
+*.o
+*.qmake.stash
+.qmake.stash
+.moc/
+.obj/
+.rcc/
+ai-activity

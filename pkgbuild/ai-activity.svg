@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFD60A" />
+      <stop offset="100%" stop-color="#FF9F0A" />
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="14" fill="#161b22" stroke="#30363d" stroke-width="2"/>
+  <!-- Heatmap grid representation -->
+  <rect x="14" y="14" width="8" height="8" rx="2" fill="#21262d"/>
+  <rect x="25" y="14" width="8" height="8" rx="2" fill="#FFD60A" opacity="0.4"/>
+  <rect x="36" y="14" width="8" height="8" rx="2" fill="#FFD60A" opacity="0.8"/>
+  <rect x="47" y="14" width="8" height="8" rx="2" fill="#FFD60A"/>
+
+  <rect x="14" y="25" width="8" height="8" rx="2" fill="#FFD60A" opacity="0.3"/>
+  <rect x="25" y="25" width="8" height="8" rx="2" fill="#FFD60A" opacity="0.6"/>
+  <rect x="36" y="25" width="8" height="8" rx="2" fill="#21262d"/>
+  <rect x="47" y="25" width="8" height="8" rx="2" fill="#FFD60A" opacity="0.9"/>
+
+  <rect x="14" y="36" width="8" height="8" rx="2" fill="#FFD60A" opacity="0.7"/>
+  <rect x="25" y="36" width="8" height="8" rx="2" fill="#FFD60A"/>
+  <rect x="36" y="36" width="8" height="8" rx="2" fill="#FFD60A" opacity="0.4"/>
+  <rect x="47" y="36" width="8" height="8" rx="2" fill="#21262d"/>
+
+  <!-- Activity pulse indicator line -->
+  <path d="M 12 50 L 22 50 L 28 44 L 34 54 L 40 47 L 46 50 L 52 50" fill="none" stroke="url(#grad)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
