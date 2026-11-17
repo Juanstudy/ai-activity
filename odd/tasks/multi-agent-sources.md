@@ -68,6 +68,15 @@ breakdown groups only Pi data. Research confirmed real local data for all four a
   source flags, keep the existing Pi path working, and document the new sources in README.
 - [x] **MAS-5** Verify: full `bin/test`, clean `bin/build`, `git diff --check`, structural
   readback, and work-unit commits.
+- [ ] **MAS-6** (next slice) OpenCode source: read-only SQLite parser for
+  `~/.local/share/opencode/opencode.db`. Use `session.cost`, `tokens_input`, `tokens_output`,
+  `tokens_reasoning`, `tokens_cache_read`, `tokens_cache_write`, `model`, `agent`, `time_created`;
+  parse `message.data` JSON for per-message granularity. Open with `mode=ro` because of WAL.
+  `session.parent_id` is currently empty, so subagent detection is unverified.
+- [ ] **MAS-7** (later slice) Codex source: zstd-compressed JSONL under
+  `~/.codex/sessions/**/*.jsonl.zst`. Needs a zstd dependency decision (link `libzstd` vs shell
+  out to `zstd -dc`). Token fields exist in `token_usage_record.payload.usage`; **no cost data
+  exists** — display "not reported", never fabricate. Subagent signal unverified.
 
 ## Acceptance criteria
 
@@ -138,8 +147,28 @@ breakdown groups only Pi data. Research confirmed real local data for all four a
   matches the implemented default flags and deferred sources.
 - RDD not run: explicitly skipped by the user and unavailable in this runtime.
 
-## Next step
+## Deferred work (resume here next session)
 
-Slice 1 is complete. Remaining roadmap: OpenCode (SQLite source) and Codex (zstd source, no
-cost data) as separate slices. Push/PR for `feat/multi-agent-sources` is a user decision; the
-eventual PR should stack on PR #1 (`chore/state-review-cleanup`) or target main after it merges.
+Slice 1 is complete and verified. The two unchecked items above are the pending roadmap:
+
+1. **MAS-6 — OpenCode.** Richest remaining source. Evidence gathered on 2026-11-17:
+   `~/.local/share/opencode/opencode.db` (42 MB, WAL) has a `session` table with `cost`,
+   `tokens_input`, `tokens_output`, `tokens_reasoning`, `tokens_cache_read`,
+   `tokens_cache_write`, `model`, `agent`, `time_created`; `message.data` holds per-message
+   tokens/cost. Read-only connection: `sqlite3 "file:$DB?mode=ro"`. Open with a new parser behind
+   the existing `UsageParser`/`SourceRegistry` interface, add the `opencode` flag (currently
+   defined but disabled), synthetic fixtures, and a README row update.
+2. **MAS-7 — Codex.** `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl.zst`; `zstd` CLI is present
+   on this machine. `token_usage_record.payload.usage` carries all token counters; there is no
+   cost field anywhere, so keep `costUsd = 0` and label it "not reported" in the UI/docs. Decide
+   the zstd dependency (`libzstd` link vs `zstd -dc` subprocess) before implementing.
+
+Research notes and per-source field maps are persisted in Engram under topic
+`architecture/agent-sources`. The full research handoff is reachable from that project memory.
+
+## Delivery
+
+User authorized publishing on 2026-11-17. This branch stacks on PR #1
+(`chore/state-review-cleanup`); PR #1 must merge first (or this PR must be retargeted to main)
+before these commits land on main. Push, PR creation and merge remain explicit user decisions
+except where the user has already authorized them.
