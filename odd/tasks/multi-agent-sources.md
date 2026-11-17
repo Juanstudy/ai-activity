@@ -66,7 +66,7 @@ breakdown groups only Pi data. Research confirmed real local data for all four a
   Tests with synthetic fixtures.
 - [x] **MAS-4** Wire parsers into `Storage::syncSource`/Backend refresh with opt-in
   source flags, keep the existing Pi path working, and document the new sources in README.
-- [ ] **MAS-5** Verify: full `bin/test`, clean `bin/build`, `git diff --check`, structural
+- [x] **MAS-5** Verify: full `bin/test`, clean `bin/build`, `git diff --check`, structural
   readback, and work-unit commits.
 
 ## Acceptance criteria
@@ -127,6 +127,19 @@ breakdown groups only Pi data. Research confirmed real local data for all four a
   no warnings after adding `INCLUDEPATH += src` for the new `src/parsers/` subdir;
   `git diff --check` clean. RDD not run per user instruction. No commits made (parent commits).
 
+## Parent verification and delivery (2026-11-17)
+
+- Work unit `ff2413a feat(db): add source dimension and source-scoped dedupe` (MAS-1).
+- Work unit `09f9815 feat(sources): add omp and Claude transcript parsers` (MAS-2..4).
+- Parent re-ran `bin/test`: 20 passed, 0 failed, 0 skipped, 0 blacklisted (147ms), exit 0.
+- Structural readback confirmed: Claude proration is a documented token-share estimate from
+  `cost-state.totalCostUSD`; `Backend` disables omp/Claude whenever a custom sessions dir is
+  supplied, so tests never read real home-directory logs; the README "Data sources" table
+  matches the implemented default flags and deferred sources.
+- RDD not run: explicitly skipped by the user and unavailable in this runtime.
+
 ## Next step
 
-MAS-5: structural readback, work-unit commits by the parent, and final delivery checks.
+Slice 1 is complete. Remaining roadmap: OpenCode (SQLite source) and Codex (zstd source, no
+cost data) as separate slices. Push/PR for `feat/multi-agent-sources` is a user decision; the
+eventual PR should stack on PR #1 (`chore/state-review-cleanup`) or target main after it merges.
