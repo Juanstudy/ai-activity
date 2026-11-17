@@ -8,7 +8,6 @@ Makefile
 .rcc/
 *.pkg.tar.zst
 pkg/
-src/
 pkgbuild/pkg/
 pkgbuild/src/
 pkgbuild/*.pkg.tar.zst
