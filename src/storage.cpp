@@ -277,6 +277,83 @@ UsageSummary Storage::getSummary(qint64 startTimeMs, qint64 endTimeMs) const {
     return summary;
 }
 
+StreakInfo Storage::getStreak(const QDate &referenceDate) const {
+    StreakInfo info;
+    QSqlQuery q(m_db);
+    q.prepare("SELECT DISTINCT date FROM events ORDER BY date DESC;");
+    if (!q.exec()) {
+        return info;
+    }
+
+    QList<QDate> dates;
+    while (q.next()) {
+        const QString str = q.value(0).toString();
+        const QDate d = QDate::fromString(str, Qt::ISODate);
+        if (d.isValid() && (dates.isEmpty() || dates.last() != d)) {
+            dates.append(d);
+        }
+    }
+
+    if (dates.isEmpty()) {
+        return info;
+    }
+
+    // Current streak calculation relative to referenceDate
+    // The streak is active if there is activity on referenceDate OR referenceDate - 1 (yesterday)
+    QDate currentExpected;
+    bool streakStarted = false;
+
+    for (const QDate &d : dates) {
+        if (!streakStarted) {
+            if (d == referenceDate) {
+                info.currentStreak = 1;
+                currentExpected = referenceDate.addDays(-1);
+                streakStarted = true;
+            } else if (d == referenceDate.addDays(-1)) {
+                info.currentStreak = 1;
+                currentExpected = referenceDate.addDays(-2);
+                streakStarted = true;
+            } else if (d < referenceDate.addDays(-1)) {
+                // Latest activity is older than yesterday, current streak is 0
+                break;
+            }
+        } else {
+            if (d == currentExpected) {
+                info.currentStreak++;
+                currentExpected = currentExpected.addDays(-1);
+            } else if (d < currentExpected) {
+                // Gap in streak
+                break;
+            }
+        }
+    }
+
+    // Longest streak calculation across all recorded history
+    QList<QDate> ascDates = dates;
+    std::sort(ascDates.begin(), ascDates.end());
+
+    int longest = 0;
+    int currentRun = 0;
+    QDate prev;
+
+    for (const QDate &d : ascDates) {
+        if (prev.isNull()) {
+            currentRun = 1;
+        } else if (d == prev.addDays(1)) {
+            currentRun++;
+        } else if (d == prev) {
+            // Duplicate date, skip
+        } else {
+            currentRun = 1;
+        }
+        longest = std::max(longest, currentRun);
+        prev = d;
+    }
+
+    info.maxStreak = std::max(longest, info.currentStreak);
+    return info;
+}
+
 QVariantList Storage::getHeatmapDays(qint64 startTimeMs, qint64 endTimeMs) const {
     QVariantList list;
     QSqlQuery q(m_db);

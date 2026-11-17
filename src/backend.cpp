@@ -77,6 +77,10 @@ void Backend::recalculate() {
     m_modelBreakdown = m_storage.getBreakdown("model", startMs, endMs);
     m_agentBreakdown = m_storage.getBreakdown("agent", startMs, endMs);
 
+    const auto streak = m_storage.getStreak();
+    m_currentStreak = streak.currentStreak;
+    m_maxStreak = streak.maxStreak;
+
     // Heatmap: show at least the last 52 weeks or range depending on user selection
     const QDateTime now = QDateTime::currentDateTime();
     qint64 heatmapStart = now.addDays(-364).toMSecsSinceEpoch();

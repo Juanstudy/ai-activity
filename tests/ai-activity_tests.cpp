@@ -1,6 +1,7 @@
 #include <QtTest>
 #include <QTemporaryDir>
 #include <QFile>
+#include <QSqlQuery>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 
@@ -17,6 +18,8 @@ private slots:
     void testStorageInitAndParsing();
     void testTrmConversion();
     void testThemeAccentDefault();
+    void testThemeScaleAndDp();
+    void testStreakCalculation();
     void testNumberFormatting();
     void testRangeSwitching();
     void testQmlLoadsCleanly();
@@ -103,6 +106,81 @@ void AiActivityTests::testThemeAccentDefault() {
     // Should have valid default accent and foreground
     QVERIFY(theme.accent().startsWith("#"));
     QVERIFY(theme.accentForeground() == "black" || theme.accentForeground() == "white");
+}
+
+void AiActivityTests::testThemeScaleAndDp() {
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+
+    Theme theme(tempDir.path());
+    QCOMPARE(theme.uiScale(), 1.18);
+    QCOMPARE(theme.dp(100), 118);
+    QCOMPARE(theme.dp(10), 12);
+    QCOMPARE(theme.dp(14), 17);
+
+    // Test setter and clamp bounds
+    theme.setUiScale(1.5);
+    QCOMPARE(theme.uiScale(), 1.5);
+    QCOMPARE(theme.dp(10), 15);
+
+    // Out of bounds should be rejected
+    theme.setUiScale(0.2);
+    QCOMPARE(theme.uiScale(), 1.5);
+    theme.setUiScale(5.0);
+    QCOMPARE(theme.uiScale(), 1.5);
+}
+
+void AiActivityTests::testStreakCalculation() {
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+
+    Storage storage(tempDir.path() + "/test_streak.db");
+    QVERIFY(storage.init());
+
+    const QDate today(2026, 11, 11);
+
+    // Empty DB: 0 streak
+    auto s0 = storage.getStreak(today);
+    QCOMPARE(s0.currentStreak, 0);
+    QCOMPARE(s0.maxStreak, 0);
+
+    // Helper to insert a mock event at a given date
+    auto insertEvent = [&](const QString &dateStr, const QString &id) {
+        QSqlQuery q(QSqlDatabase::database(storage.connectionName()));
+        q.prepare(R"(
+            INSERT INTO events (session_id, message_id, timestamp, date, project, agent, model, provider, tokens_in, tokens_out, tokens_reasoning, tokens_total, cost_usd, is_subagent)
+            VALUES ('s1', :id, 1000, :date, 'p1', 'a1', 'm1', 'pr1', 10, 10, 0, 20, 0.001, 0);
+        )");
+        q.bindValue(":id", id);
+        q.bindValue(":date", dateStr);
+        QVERIFY(q.exec());
+    };
+
+    // Insert dates: 2026-11-01, 2026-11-02, 2026-11-03 (run of 3)
+    insertEvent("2026-11-01", "m1");
+    insertEvent("2026-11-02", "m2");
+    insertEvent("2026-11-03", "m3");
+
+    // Insert dates: 2026-11-09, 2026-11-10 (run of 2, ending yesterday relative to 2026-11-11)
+    insertEvent("2026-11-09", "m4");
+    insertEvent("2026-11-10", "m5");
+
+    auto s1 = storage.getStreak(today);
+    // Yesterday had activity, so current streak is 2, longest streak is 3 (Nov 1-3)
+    QCOMPARE(s1.currentStreak, 2);
+    QCOMPARE(s1.maxStreak, 3);
+
+    // Add activity today (2026-11-11)
+    insertEvent("2026-11-11", "m6");
+    auto s2 = storage.getStreak(today);
+    QCOMPARE(s2.currentStreak, 3);
+    QCOMPARE(s2.maxStreak, 3);
+
+    // Add activity tomorrow (2026-11-12) with refDate tomorrow -> streak becomes 4 (Nov 9, 10, 11, 12)
+    insertEvent("2026-11-12", "m7");
+    auto s3 = storage.getStreak(QDate(2026, 11, 12));
+    QCOMPARE(s3.currentStreak, 4);
+    QCOMPARE(s3.maxStreak, 4);
 }
 
 void AiActivityTests::testNumberFormatting() {
