@@ -3,7 +3,11 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QSqlDatabase>
+#include <QSqlError>
 #include <QSqlQuery>
+#include <QStringList>
+#include <QUuid>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 
@@ -27,6 +31,8 @@ private slots:
     void testNumberFormatting();
     void testRangeSwitching();
     void testQmlLoadsCleanly();
+    void testLegacyDatabaseMigration();
+    void testSourceScopedMessageId();
 };
 
 void AiActivityTests::testProjectNameExtraction() {
@@ -286,6 +292,107 @@ void AiActivityTests::testQmlLoadsCleanly() {
 
     engine.load(QUrl("qrc:/Main.qml"));
     QVERIFY2(!engine.rootObjects().isEmpty(), "QQmlApplicationEngine failed to load qrc:/Main.qml");
+}
+
+void AiActivityTests::testLegacyDatabaseMigration() {
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+
+    const QString dbPath = tempDir.path() + "/legacy.db";
+
+    // Build an old-format database on a dedicated connection name so it does not
+    // clash with the connection Storage opens when it migrates the same file.
+    const QString setupConn = QUuid::createUuid().toString();
+    {
+        QSqlDatabase legacy = QSqlDatabase::addDatabase("QSQLITE", setupConn);
+        legacy.setDatabaseName(dbPath);
+        QVERIFY(legacy.open());
+
+        QSqlQuery create(legacy);
+        QVERIFY2(create.exec(R"(
+            CREATE TABLE events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT,
+                message_id TEXT UNIQUE,
+                timestamp INTEGER, date TEXT, project TEXT, agent TEXT,
+                model TEXT, provider TEXT,
+                tokens_in INTEGER, tokens_out INTEGER, tokens_reasoning INTEGER,
+                tokens_total INTEGER, cost_usd REAL, is_subagent INTEGER
+            );
+        )"), qPrintable(create.lastError().text()));
+
+        for (const QString &id : {QString("legacy-m1"), QString("legacy-m2")}) {
+            QSqlQuery insert(legacy);
+            insert.prepare(R"(
+                INSERT INTO events (session_id, message_id, timestamp, date, project, agent, tokens_total)
+                VALUES ('s1', :id, 1000, '2026-11-01', 'p1', 'pi', 10);
+            )");
+            insert.bindValue(":id", id);
+            QVERIFY2(insert.exec(), qPrintable(insert.lastError().text()));
+        }
+    }
+    QSqlDatabase::removeDatabase(setupConn);
+
+    // Opening through Storage must migrate the table without losing either row
+    // and must backfill the new source column with 'pi'.
+    Storage storage(dbPath);
+    QVERIFY(storage.init());
+
+    QSqlQuery check(QSqlDatabase::database(storage.connectionName()));
+    QVERIFY2(check.exec("SELECT message_id, source FROM events ORDER BY message_id;"),
+             qPrintable(check.lastError().text()));
+
+    QStringList ids;
+    int piRows = 0;
+    while (check.next()) {
+        ids << check.value("message_id").toString();
+        if (check.value("source").toString() == "pi")
+            piRows++;
+    }
+    QCOMPARE(ids.size(), 2);
+    QCOMPARE(piRows, 2);
+    QVERIFY(ids.contains("legacy-m1"));
+    QVERIFY(ids.contains("legacy-m2"));
+
+    // The migration must also recreate the original indexes and add sync_state.
+    QSqlQuery indexes(QSqlDatabase::database(storage.connectionName()));
+    QVERIFY(indexes.exec("SELECT name FROM sqlite_master WHERE type = 'index';"));
+    QStringList indexNames;
+    while (indexes.next())
+        indexNames << indexes.value("name").toString();
+    QVERIFY(indexNames.contains("idx_events_timestamp"));
+    QVERIFY(indexNames.contains("idx_events_date"));
+    QVERIFY(indexNames.contains("idx_events_project"));
+    QVERIFY(indexNames.contains("idx_events_model"));
+
+    QSqlQuery tables(QSqlDatabase::database(storage.connectionName()));
+    QVERIFY(tables.exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'sync_state';"));
+    QVERIFY(tables.next());
+}
+
+void AiActivityTests::testSourceScopedMessageId() {
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+
+    Storage storage(tempDir.path() + "/source.db");
+    QVERIFY(storage.init());
+    QSqlDatabase db = QSqlDatabase::database(storage.connectionName());
+
+    auto insert = [&db](const QString &source, const QString &messageId) {
+        QSqlQuery q(db);
+        q.prepare("INSERT INTO events (source, message_id, timestamp, date) "
+                  "VALUES (:source, :message_id, 1000, '2026-11-01');");
+        q.bindValue(":source", source);
+        q.bindValue(":message_id", messageId);
+        return q.exec();
+    };
+
+    // The same message_id can live under two different sources.
+    QVERIFY2(insert("pi", "shared-id"), "pi/omp dedupe must be source-scoped");
+    QVERIFY2(insert("omp", "shared-id"), "pi/omp dedupe must be source-scoped");
+
+    // But the exact (source, message_id) pair is still rejected.
+    QVERIFY(!insert("pi", "shared-id"));
 }
 
 QTEST_MAIN(AiActivityTests)

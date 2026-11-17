@@ -7,6 +7,8 @@
 #include <QVariantList>
 #include <QVariantMap>
 
+class QSqlQuery;
+
 struct UsageSummary {
     double totalCostUsd = 0.0;
     qint64 totalTokens = 0;
@@ -20,6 +22,14 @@ struct UsageSummary {
 struct StreakInfo {
     int currentStreak = 0;
     int maxStreak = 0;
+};
+
+// Incremental-sync bookmark for one file under one source. `found` is false when
+// no row is recorded, which lets parsers decide to parse a file from scratch.
+struct FileSyncState {
+    bool found = false;
+    qint64 mtime = 0;
+    qint64 size = 0;
 };
 
 class Storage : public QObject {
@@ -42,6 +52,13 @@ public:
     static QString extractProjectFromDirName(const QString &dirName);
 
 private:
+    bool migrateEventsToSourceSchema(QSqlQuery *query);
+    bool eventsHaveColumn(QSqlQuery *query, const QString &table, const QString &column) const;
+    bool eventsHaveCompositeUnique(QSqlQuery *query) const;
+
+    FileSyncState fileSyncState(const QString &source, const QString &filePath) const;
+    bool setFileSyncState(const QString &source, const QString &filePath, qint64 mtime, qint64 size);
+
     QString m_connectionName;
     QString m_dbPath;
     QSqlDatabase m_db;
