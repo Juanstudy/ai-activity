@@ -53,18 +53,18 @@ breakdown groups only Pi data. Research confirmed real local data for all four a
   recreate indexes, and add a `sync_state(source, file_path, mtime, size)` table. Test both
   a fresh DB and a legacy DB with pre-existing rows; prove two different sources can store
   the same `message_id`.
-- [ ] **MAS-2** Source registry + omp parser: read `~/.omp/agent/sessions/**/*.jsonl`,
+- [x] **MAS-2** Source registry + omp parser: read `~/.omp/agent/sessions/**/*.jsonl`,
   Pi-shaped records with `reasoningTokens` and `cost.total`; emit normalized events with
   `source='omp'`, agent label `omp`, project via `extractProjectFromDirName`, subagent via
   the directory heuristic. Incremental sync keyed on file mtime/size. Tests with synthetic
   fixtures.
-- [ ] **MAS-3** Claude parser: read `~/.claude/projects/**/*.jsonl` plus `subagents/*.jsonl`;
+- [x] **MAS-3** Claude parser: read `~/.claude/projects/**/*.jsonl` plus `subagents/*.jsonl`;
   `type=assistant` records with `input_tokens`, `output_tokens`,
   `cache_creation_input_tokens`, `cache_read_input_tokens`, `output_tokens_details.thinking_tokens`;
   dedupe key `uuid` (not `message.id`); subagent from `isSidechain`/`agentId`;
   project from `cwd`/slug; session-level `cost-state.totalCostUSD` prorated by token share.
   Tests with synthetic fixtures.
-- [ ] **MAS-4** Wire parsers into `Storage::syncFromPiSessions`/Backend refresh with opt-in
+- [x] **MAS-4** Wire parsers into `Storage::syncSource`/Backend refresh with opt-in
   source flags, keep the existing Pi path working, and document the new sources in README.
 - [ ] **MAS-5** Verify: full `bin/test`, clean `bin/build`, `git diff --check`, structural
   readback, and work-unit commits.
@@ -103,7 +103,30 @@ breakdown groups only Pi data. Research confirmed real local data for all four a
 - New `sync_state(source, file_path, mtime, size)` table plus private
   `fileSyncState`/`setFileSyncState` helpers for later incremental parsers.
 - Pi insert path now binds `source='pi'`.
+- 2026-11-17 **MAS-2 GREEN.** RED observed first: `bin/test` could not compile —
+  `No rule to make target '../src/parsers/pishapedparser.cpp'` — because the parser API did not
+  exist. GREEN after implementation: `testOmpParser` and `testIncrementalSync` pass. Design:
+  `UsageParser` returns `NormalizedEvent` rows plus `FileStamp` records; `PiShapedParser` shares
+  the directory walk between `PiParser` and `OmpParser`, which overrides `reasoningTokens`,
+  root-level `modelID`/`providerID`, and the `omp` agent label. `SourceRegistry` owns one slot
+  per source (pi/omp/claude on; codex/opencode off), each flag, root and parser overridable.
+- 2026-11-17 **MAS-3 GREEN.** `testClaudeParser` passes with a synthetic session: uuid dedupe
+  (a duplicate uuid with a different `message.id` is dropped), cache tokens folded into
+  tokensIn, thinking tokens separated, subagent from `isSidechain`/`agentId`, project from `cwd`,
+  nested `subagents/*.jsonl` read, ISO-8601 with Z/ms normalized, and prorated costs summing back
+  to `totalCostUSD` within 1e-9. Files with no `cost-state` keep cost 0.
+- 2026-11-17 **MAS-4 GREEN.** `Storage::syncSource` skips unchanged (mtime, size) files via
+  `sync_state` and writes stamps only after a committed insert. `Backend::refresh()` now calls
+  `SourceRegistry::syncAll()`; default construction syncs Pi + omp + Claude, while a custom
+  sessions dir restricts the registry to Pi rooted there so existing tests never read the real
+  `~/.omp`/`~/.claude`. `testBackendSourceWiring` proves both paths with a redirected HOME.
+  README gained a concise "Data sources" table noting opt-in/overridable sources and prorated
+  Claude costs. `syncFromPiSessions` is untouched and its tests still pass.
+- 2026-11-17 Final verification: `bin/test` 20 passed, 0 failed (baseline 15 passed — five new
+  tests: omp, Claude, incremental, disabled sources, backend wiring); `bin/build` succeeds with
+  no warnings after adding `INCLUDEPATH += src` for the new `src/parsers/` subdir;
+  `git diff --check` clean. RDD not run per user instruction. No commits made (parent commits).
 
 ## Next step
 
-Delegate MAS-2 (source registry + omp parser) as the next bounded work unit.
+MAS-5: structural readback, work-unit commits by the parent, and final delivery checks.

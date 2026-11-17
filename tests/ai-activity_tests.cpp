@@ -10,11 +10,48 @@
 #include <QUuid>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include <QFileDevice>
+#include <memory>
+#include <utility>
 
 #include "storage.h"
 #include "trmclient.h"
 #include "theme.h"
 #include "backend.h"
+#include "parsers/pishapedparser.h"
+#include "parsers/claudeparser.h"
+#include "parsers/sourceregistry.h"
+
+namespace {
+
+// Wraps a real parser so incremental tests can count how many files were
+// actually parsed (skipped files never show up in ParseResult::files).
+class CountingParser : public UsageParser {
+public:
+    CountingParser(std::shared_ptr<UsageParser> delegate, int *filesParsed)
+        : m_delegate(std::move(delegate)), m_filesParsed(filesParsed) {}
+
+    QString source() const override { return m_delegate->source(); }
+
+    ParseResult parse(const QString &rootPath, const FileSkipPredicate &shouldSkip) const override {
+        ParseResult result = m_delegate->parse(rootPath, shouldSkip);
+        *m_filesParsed += result.files.size();
+        return result;
+    }
+
+private:
+    std::shared_ptr<UsageParser> m_delegate;
+    int *m_filesParsed;
+};
+
+int countEventRows(Storage *storage) {
+    QSqlQuery q(QSqlDatabase::database(storage->connectionName()));
+    if (!q.exec("SELECT COUNT(*) FROM events;"))
+        return -1;
+    return q.next() ? q.value(0).toInt() : -1;
+}
+
+}  // namespace
 
 class AiActivityTests : public QObject {
     Q_OBJECT
@@ -33,6 +70,11 @@ private slots:
     void testQmlLoadsCleanly();
     void testLegacyDatabaseMigration();
     void testSourceScopedMessageId();
+    void testOmpParser();
+    void testClaudeParser();
+    void testIncrementalSync();
+    void testRegistryDisabledSources();
+    void testBackendSourceWiring();
 };
 
 void AiActivityTests::testProjectNameExtraction() {
@@ -393,6 +435,332 @@ void AiActivityTests::testSourceScopedMessageId() {
 
     // But the exact (source, message_id) pair is still rejected.
     QVERIFY(!insert("pi", "shared-id"));
+}
+
+void AiActivityTests::testOmpParser() {
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+
+    const QString root = tempDir.path() + "/omp";
+    const QString mainDir = root + "/--home-juan-Projects-oma-type--";
+    const QString subagentDir = root + "/--home-juan-gentle-agents-agent-7--";
+    QVERIFY(QDir().mkpath(mainDir));
+    QVERIFY(QDir().mkpath(subagentDir));
+
+    // omp records are Pi-shaped: usage lives under .message.usage, reasoning is
+    // named reasoningTokens, and the model/provider/ttft fields sit at root.
+    const QByteArray mainLine =
+        "{\"type\":\"message\",\"id\":\"omp-m1\",\"timestamp\":1700000000000,"
+        "\"api\":\"anthropic\",\"modelID\":\"claude-sonnet-4\",\"providerID\":\"anthropic\","
+        "\"ttft\":120,\"message\":{\"role\":\"assistant\",\"content\":[]},"
+        "\"usage\":{\"input\":100,\"output\":50,\"reasoningTokens\":25,"
+        "\"totalTokens\":175,\"cost\":{\"total\":0.0025}}}\n";
+    QFile mainFile(mainDir + "/session-a.jsonl");
+    QVERIFY(mainFile.open(QIODevice::WriteOnly | QIODevice::Text));
+    mainFile.write(mainLine);
+    mainFile.close();
+
+    const QByteArray subLine =
+        "{\"type\":\"message\",\"id\":\"omp-m2\",\"timestamp\":1700000005000,"
+        "\"api\":\"openai\",\"modelID\":\"gpt-x\",\"providerID\":\"openai\","
+        "\"message\":{\"role\":\"assistant\",\"content\":[]},"
+        "\"usage\":{\"input\":10,\"output\":5,\"reasoningTokens\":2,"
+        "\"totalTokens\":17,\"cost\":{\"total\":0.0003}}}\n";
+    QFile subFile(subagentDir + "/session-b.jsonl");
+    QVERIFY(subFile.open(QIODevice::WriteOnly | QIODevice::Text));
+    subFile.write(subLine);
+    subFile.close();
+
+    OmpParser parser;
+    QCOMPARE(parser.source(), QString("omp"));
+    const ParseResult result = parser.parse(root, nullptr);
+    QCOMPARE(result.events.size(), 2);
+    QCOMPARE(result.files.size(), 2);
+
+    auto findEvent = [&result](const QString &id) {
+        for (const NormalizedEvent &event : result.events) {
+            if (event.messageId == id)
+                return event;
+        }
+        return NormalizedEvent();
+    };
+
+    const NormalizedEvent main = findEvent("omp-m1");
+    QCOMPARE(main.source, QString("omp"));
+    QCOMPARE(main.sessionId, QString("session-a"));
+    QCOMPARE(main.project, QString("Projects/oma-type"));
+    QCOMPARE(main.agent, QString("omp"));
+    QCOMPARE(main.model, QString("claude-sonnet-4"));
+    QCOMPARE(main.provider, QString("anthropic"));
+    QCOMPARE(main.tokensIn, 100LL);
+    QCOMPARE(main.tokensOut, 50LL);
+    QCOMPARE(main.tokensReasoning, 25LL);
+    QCOMPARE(main.tokensTotal, 175LL);
+    QCOMPARE(main.costUsd, 0.0025);
+    QCOMPARE(main.timestampMs, 1700000000000LL);
+    QVERIFY(!main.isSubagent);
+
+    const NormalizedEvent sub = findEvent("omp-m2");
+    QCOMPARE(sub.project, QString("Agent (7)"));
+    QVERIFY(sub.isSubagent);
+    QCOMPARE(sub.tokensReasoning, 2LL);
+}
+
+void AiActivityTests::testClaudeParser() {
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+
+    const QString root = tempDir.path() + "/claude";
+    const QString projectDir = root + "/projects-oma-type";
+    QVERIFY(QDir().mkpath(projectDir + "/subagents"));
+
+    const QString cwd = QDir::homePath() + "/Projects/oma-type";
+
+    auto assistantLine = [&cwd](const QString &uuid, const QString &msgId, const QString &ts,
+                                int inputTokens, int outputTokens, int cacheWrite, int cacheRead,
+                                int thinking, const QString &sessionId = QString("sess-1"),
+                                const QString &extra = QString()) {
+        return QString("{\"type\":\"assistant\",\"uuid\":\"%1\",\"sessionId\":\"%2\","
+                       "\"timestamp\":\"%3\",\"cwd\":\"%4\","
+                       "\"message\":{\"id\":\"%5\",\"role\":\"assistant\","
+                       "\"model\":\"claude-sonnet-4\",\"usage\":{\"input_tokens\":%6,"
+                       "\"output_tokens\":%7,\"cache_creation_input_tokens\":%8,"
+                       "\"cache_read_input_tokens\":%9,"
+                       "\"output_tokens_details\":{\"thinking_tokens\":%10}}},"
+                       "\"costUSD\":null%11}")
+            .arg(uuid, sessionId, ts, cwd, msgId)
+            .arg(inputTokens).arg(outputTokens).arg(cacheWrite).arg(cacheRead)
+            .arg(thinking).arg(extra);
+    };
+
+    QStringList sessionLines;
+    sessionLines << assistantLine("uuid-1", "msg-a1", "2026-11-17T10:15:30.123Z", 100, 50, 20, 10, 15);
+    sessionLines << assistantLine("uuid-2", "msg-a2", "2026-11-17T10:16:30.123Z", 200, 100, 0, 0, 25);
+    // Same uuid with a different message.id must be deduped by uuid, not message.id.
+    sessionLines << assistantLine("uuid-1", "msg-dup", "2026-11-17T10:17:30.123Z", 999, 999, 999, 999, 999);
+    sessionLines << assistantLine("uuid-3", "msg-side", "2026-11-17T10:18:30.123Z", 10, 5, 0, 0, 2,
+                                  "sess-2", ",\"agentId\":\"agent-7\",\"isSidechain\":true");
+    sessionLines << QString("{\"type\":\"cost-state\",\"totalCostUSD\":0.09}");
+    QFile sessionFile(projectDir + "/session.jsonl");
+    QVERIFY(sessionFile.open(QIODevice::WriteOnly | QIODevice::Text));
+    for (const QString &line : sessionLines)
+        sessionFile.write((line + "\n").toUtf8());
+    sessionFile.close();
+
+    // A nested subagent file with no cost-state: its cost must stay zero.
+    QFile subFile(projectDir + "/subagents/agent-session.jsonl");
+    QVERIFY(subFile.open(QIODevice::WriteOnly | QIODevice::Text));
+    subFile.write((assistantLine("uuid-4", "msg-sub", "2026-11-17T10:19:30.123Z",
+                                 40, 20, 0, 0, 5, "sess-3") + "\n").toUtf8());
+    subFile.close();
+
+    ClaudeParser parser;
+    QCOMPARE(parser.source(), QString("claude"));
+    const ParseResult result = parser.parse(root, nullptr);
+    QCOMPARE(result.events.size(), 4);
+
+    auto findEvent = [&result](const QString &id) {
+        for (const NormalizedEvent &event : result.events) {
+            if (event.messageId == id)
+                return event;
+        }
+        return NormalizedEvent();
+    };
+
+    const NormalizedEvent first = findEvent("uuid-1");
+    QCOMPARE(first.source, QString("claude"));
+    QCOMPARE(first.sessionId, QString("sess-1"));
+    QCOMPARE(first.project, QString("Projects/oma-type"));
+    QCOMPARE(first.model, QString("claude-sonnet-4"));
+    QCOMPARE(first.tokensIn, 130LL);   // input + cache write + cache read
+    QCOMPARE(first.tokensOut, 50LL);
+    QCOMPARE(first.tokensReasoning, 15LL);
+    QCOMPARE(first.tokensTotal, 195LL);
+    QVERIFY(!first.isSubagent);
+    QCOMPARE(first.timestampMs,
+             QDateTime::fromString("2026-11-17T10:15:30.123Z", Qt::ISODateWithMs).toMSecsSinceEpoch());
+
+    // uuid dedupe: the duplicate uuid's message.id must never appear.
+    for (const NormalizedEvent &event : result.events)
+        QVERIFY(event.messageId != QString("msg-dup"));
+
+    const NormalizedEvent side = findEvent("uuid-3");
+    QVERIFY(side.isSubagent);
+    QVERIFY(side.costUsd > 0.0);
+
+    const NormalizedEvent nested = findEvent("uuid-4");
+    QCOMPARE(nested.sessionId, QString("sess-3"));
+    QCOMPARE(nested.costUsd, 0.0);
+
+    // Prorated costs in the main session file sum back to totalCostUSD.
+    double proratedSum = 0.0;
+    for (const NormalizedEvent &event : result.events) {
+        if (event.sessionId == "sess-1" || event.sessionId == "sess-2")
+            proratedSum += event.costUsd;
+    }
+    QVERIFY(qAbs(proratedSum - 0.09) < 1e-9);
+}
+
+void AiActivityTests::testIncrementalSync() {
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+
+    Storage storage(tempDir.path() + "/sync.db");
+    QVERIFY(storage.init());
+
+    const QString root = tempDir.path() + "/omp";
+    const QString sessionDir = root + "/--home-juan-Projects-incremental--";
+    QVERIFY(QDir().mkpath(sessionDir));
+    const QString filePath = sessionDir + "/session.jsonl";
+
+    auto writeLine = [&filePath](const QString &id) {
+        QFile file(filePath);
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Text));
+        file.write((QString("{\"type\":\"message\",\"id\":\"%1\",\"timestamp\":1700000000000,"
+                            "\"message\":{\"role\":\"assistant\"},"
+                            "\"usage\":{\"input\":10,\"output\":5,\"reasoningTokens\":2,"
+                            "\"totalTokens\":17,\"cost\":{\"total\":0.001}}}\n").arg(id)).toUtf8());
+        file.close();
+    };
+    writeLine("inc-m1");
+
+    int filesParsed = 0;
+    auto counting = std::make_shared<CountingParser>(std::make_shared<OmpParser>(), &filesParsed);
+
+    SourceRegistry registry(&storage);
+    registry.setEnabled("pi", false);
+    registry.setEnabled("claude", false);
+    registry.setEnabled("omp", true);
+    registry.setRootPath("omp", root);
+    registry.setParser("omp", counting);
+
+    QCOMPARE(registry.syncAll(), 1);
+    QCOMPARE(filesParsed, 1);
+    QCOMPARE(countEventRows(&storage), 1);
+
+    // Unchanged mtime/size: the file is skipped and nothing is inserted.
+    QCOMPARE(registry.syncAll(), 0);
+    QCOMPARE(filesParsed, 1);
+    QCOMPARE(countEventRows(&storage), 1);
+
+    // Touching only the mtime must force a re-parse (content stays identical,
+    // so the source-scoped dedupe still keeps a single row).
+    QFile touchFile(filePath);
+    QVERIFY(touchFile.open(QIODevice::ReadOnly));
+    QVERIFY2(touchFile.setFileTime(QDateTime::currentDateTimeUtc().addSecs(5),
+                                   QFileDevice::FileModificationTime),
+             "failed to touch fixture mtime");
+    touchFile.close();
+    QCOMPARE(registry.syncAll(), 0);
+    QCOMPARE(filesParsed, 2);
+    QCOMPARE(countEventRows(&storage), 1);
+
+    // A changed file with a new message id produces a new row.
+    writeLine("inc-m2");
+    QCOMPARE(registry.syncAll(), 1);
+    QCOMPARE(filesParsed, 3);
+    QCOMPARE(countEventRows(&storage), 2);
+}
+
+void AiActivityTests::testRegistryDisabledSources() {
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+
+    Storage storage(tempDir.path() + "/disabled.db");
+    QVERIFY(storage.init());
+
+    const QString root = tempDir.path() + "/omp";
+    const QString sessionDir = root + "/--home-juan-Projects-disabled--";
+    QVERIFY(QDir().mkpath(sessionDir));
+    QFile file(sessionDir + "/session.jsonl");
+    QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Text));
+    file.write("{\"type\":\"message\",\"id\":\"disabled-m1\",\"timestamp\":1700000000000,"
+               "\"message\":{\"role\":\"assistant\"},"
+               "\"usage\":{\"input\":1,\"output\":1,\"reasoningTokens\":0,"
+               "\"totalTokens\":2,\"cost\":{\"total\":0.001}}}\n");
+    file.close();
+
+    int filesParsed = 0;
+    auto counting = std::make_shared<CountingParser>(std::make_shared<OmpParser>(), &filesParsed);
+
+    SourceRegistry registry(&storage);
+    registry.setEnabled("pi", false);
+    registry.setEnabled("claude", false);
+    registry.setEnabled("omp", false);
+    registry.setRootPath("omp", root);
+    registry.setParser("omp", counting);
+
+    QVERIFY(!registry.isEnabled("omp"));
+    QCOMPARE(registry.syncAll(), 0);
+    QCOMPARE(filesParsed, 0);
+    QCOMPARE(countEventRows(&storage), 0);
+}
+
+void AiActivityTests::testBackendSourceWiring() {
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+
+    // Redirect HOME so "real" source roots are synthetic fixtures, never the
+    // user's ~/.pi, ~/.omp or ~/.claude directories.
+    const QByteArray originalHome = qgetenv("HOME");
+    const QString home = tempDir.path();
+    qputenv("HOME", home.toUtf8());
+
+    auto writeRecord = [](const QString &path, const QByteArray &line) {
+        QVERIFY(QDir().mkpath(QFileInfo(path).absolutePath()));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Text));
+        file.write(line);
+        file.close();
+    };
+
+    const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+    const QByteArray piLine = QString("{\"type\":\"message\",\"id\":\"wired-pi\",\"timestamp\":%1,"
+                                      "\"message\":{\"role\":\"assistant\"},"
+                                      "\"usage\":{\"input\":1,\"output\":1,\"reasoning\":0,"
+                                      "\"totalTokens\":2,\"cost\":{\"total\":0.001}}}\n")
+                                  .arg(nowMs).toUtf8();
+    const QByteArray ompLine = QString("{\"type\":\"message\",\"id\":\"wired-omp\",\"timestamp\":%1,"
+                                       "\"modelID\":\"m\",\"providerID\":\"p\","
+                                       "\"message\":{\"role\":\"assistant\"},"
+                                       "\"usage\":{\"input\":1,\"output\":1,\"reasoningTokens\":0,"
+                                       "\"totalTokens\":2,\"cost\":{\"total\":0.001}}}\n")
+                                   .arg(nowMs).toUtf8();
+    const QByteArray claudeLine = QString("{\"type\":\"assistant\",\"uuid\":\"wired-claude\","
+                                          "\"sessionId\":\"s\",\"timestamp\":\"%1\","
+                                          "\"message\":{\"role\":\"assistant\",\"model\":\"m\","
+                                          "\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}}\n"
+                                          "{\"type\":\"cost-state\",\"totalCostUSD\":0.01}\n")
+                                      .arg(QDateTime::fromMSecsSinceEpoch(nowMs).toUTC().toString(Qt::ISODateWithMs))
+                                      .toUtf8();
+
+    writeRecord(home + "/.pi/agent/sessions/--home-juan-Projects-pi--/pi.jsonl", piLine);
+    writeRecord(home + "/.omp/agent/sessions/--home-juan-Projects-omp--/omp.jsonl", ompLine);
+    writeRecord(home + "/.claude/projects/slug/session.jsonl", claudeLine);
+
+    // Production-like Backend: no custom dir means all three default sources.
+    Backend full(home + "/full.db", QString(), nullptr, false);
+    QStringList fullAgents;
+    for (const QVariant &item : full.agentBreakdown())
+        fullAgents << item.toMap()["name"].toString();
+
+    // Custom-dir Backend: only Pi, rooted at the injected directory.
+    Backend hermetic(home + "/hermetic.db", home + "/.pi/agent/sessions", nullptr, false);
+    QStringList hermeticAgents;
+    for (const QVariant &item : hermetic.agentBreakdown())
+        hermeticAgents << item.toMap()["name"].toString();
+
+    if (originalHome.isEmpty())
+        qunsetenv("HOME");
+    else
+        qputenv("HOME", originalHome);
+
+    QVERIFY(fullAgents.contains("pi"));
+    QVERIFY(fullAgents.contains("omp"));
+    QVERIFY(fullAgents.contains("claude"));
+    QVERIFY(hermeticAgents.contains("pi"));
+    QVERIFY(!hermeticAgents.contains("omp"));
+    QVERIFY(!hermeticAgents.contains("claude"));
 }
 
 QTEST_MAIN(AiActivityTests)

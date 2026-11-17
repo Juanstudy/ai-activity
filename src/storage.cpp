@@ -428,6 +428,76 @@ int Storage::syncFromPiSessions(const QString &customSessionsDir) {
     return newRecords;
 }
 
+int Storage::insertEvents(const QList<NormalizedEvent> &events) {
+    if (!m_db.transaction()) {
+        qWarning() << "Failed to start insert transaction:" << m_db.lastError().text();
+        return -1;
+    }
+
+    QSqlQuery insertQuery(m_db);
+    insertQuery.prepare(R"(
+        INSERT OR IGNORE INTO events (
+            session_id, message_id, timestamp, date, project, agent, model, provider,
+            tokens_in, tokens_out, tokens_reasoning, tokens_total, cost_usd, is_subagent, source
+        ) VALUES (
+            :session_id, :message_id, :timestamp, :date, :project, :agent, :model, :provider,
+            :tokens_in, :tokens_out, :tokens_reasoning, :tokens_total, :cost_usd, :is_subagent, :source
+        );
+    )");
+
+    int inserted = 0;
+    for (const NormalizedEvent &event : events) {
+        insertQuery.bindValue(":session_id", event.sessionId);
+        insertQuery.bindValue(":message_id", event.messageId);
+        insertQuery.bindValue(":timestamp", event.timestampMs);
+        insertQuery.bindValue(":date", QDateTime::fromMSecsSinceEpoch(event.timestampMs).toString("yyyy-MM-dd"));
+        insertQuery.bindValue(":project", event.project);
+        insertQuery.bindValue(":agent", event.agent);
+        insertQuery.bindValue(":model", event.model);
+        insertQuery.bindValue(":provider", event.provider);
+        insertQuery.bindValue(":tokens_in", event.tokensIn);
+        insertQuery.bindValue(":tokens_out", event.tokensOut);
+        insertQuery.bindValue(":tokens_reasoning", event.tokensReasoning);
+        insertQuery.bindValue(":tokens_total", event.tokensTotal);
+        insertQuery.bindValue(":cost_usd", event.costUsd);
+        insertQuery.bindValue(":is_subagent", event.isSubagent ? 1 : 0);
+        insertQuery.bindValue(":source", event.source);
+
+        if (!insertQuery.exec()) {
+            qWarning() << "Failed to insert event" << event.messageId << insertQuery.lastError().text();
+            m_db.rollback();
+            return -1;
+        }
+        if (insertQuery.numRowsAffected() > 0)
+            inserted++;
+    }
+
+    if (!m_db.commit()) {
+        qWarning() << "Failed to commit insert transaction:" << m_db.lastError().text();
+        m_db.rollback();
+        return -1;
+    }
+    return inserted;
+}
+
+int Storage::syncSource(const QString &source, const UsageParser &parser, const QString &rootPath) {
+    FileSkipPredicate shouldSkip = [this, &source](const QString &filePath, qint64 mtime, qint64 size) {
+        const FileSyncState state = fileSyncState(source, filePath);
+        return state.found && state.mtime == mtime && state.size == size;
+    };
+
+    const ParseResult result = parser.parse(rootPath, shouldSkip);
+    const int inserted = insertEvents(result.events);
+    if (inserted < 0)
+        return 0;
+
+    // Stamps are only durable once the rows are committed, so a crash before
+    // the insert cannot leave a file marked as synced with missing events.
+    for (const FileStamp &stamp : result.files)
+        setFileSyncState(source, stamp.filePath, stamp.mtime, stamp.size);
+    return inserted;
+}
+
 UsageSummary Storage::getSummary(qint64 startTimeMs, qint64 endTimeMs) const {
     UsageSummary summary;
     QSqlQuery q(m_db);

@@ -3,7 +3,10 @@
 #include <QDateTime>
 #include <QDebug>
 
-Backend::Backend(const QString &dbPath, const QString &customSessionsDir, QObject *parent, bool autoSyncTrm)
+#include "parsers/sourceregistry.h"
+
+Backend::Backend(const QString &dbPath, const QString &customSessionsDir, QObject *parent,
+                 bool autoSyncTrm, SourceRegistry *registry)
     : QObject(parent),
       m_sessionsDir(customSessionsDir),
       m_storage(dbPath, this),
@@ -12,12 +15,29 @@ Backend::Backend(const QString &dbPath, const QString &customSessionsDir, QObjec
     connect(&m_trm, &TrmClient::rateChanged, this, &Backend::dataChanged);
     connect(&m_trm, &TrmClient::syncingChanged, this, &Backend::dataChanged);
 
+    if (registry) {
+        // Caller-supplied registry wins: tests can inject a fully controlled set.
+        m_registry = registry;
+    } else {
+        m_ownedRegistry = std::make_unique<SourceRegistry>(&m_storage);
+        m_registry = m_ownedRegistry.get();
+        if (!customSessionsDir.isEmpty()) {
+            // A custom sessions dir marks a hermetic caller. Restrict sync to Pi
+            // rooted there so tests never read the real ~/.omp or ~/.claude.
+            m_registry->setEnabled("omp", false);
+            m_registry->setEnabled("claude", false);
+            m_registry->setRootPath("pi", customSessionsDir);
+        }
+    }
+
     if (m_storage.init()) {
         refresh();
     } else {
         m_lastSyncStatus = "Error initializing database";
     }
 }
+
+Backend::~Backend() = default;
 
 void Backend::setRange(const QString &range) {
     if (m_currentRange == range)
@@ -94,7 +114,7 @@ void Backend::refresh() {
     m_isSyncing = true;
     emit dataChanged();
 
-    const int newCount = m_storage.syncFromPiSessions(m_sessionsDir);
+    const int newCount = m_registry->syncAll();
     m_lastSyncStatus = QString("Synced %1 events (%2)").arg(newCount).arg(QDateTime::currentDateTime().toString("hh:mm:ss"));
 
     recalculate();

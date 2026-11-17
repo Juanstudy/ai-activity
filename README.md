@@ -11,6 +11,21 @@ cost in USD and COP, agents, projects, models, thinking tokens, and a GitHub-sty
 - **Breakdown:** By Project, Model, and Agent/Subagent with input/output and thinking tokens.
 - **Desktop Native:** Follows Omarchy theme colors and Hyprland's window rounding in real-time.
 
+## Data sources
+
+Local CLI transcripts are imported through a source registry. Every source has an enable flag and a
+configurable root path, so sources are opt-in and overridable; the shipped defaults enable:
+
+| Source | Default root | Status |
+|--------|--------------|--------|
+| Pi | `~/.pi/agent/sessions` | enabled |
+| omp | `~/.omp/agent/sessions` | enabled |
+| Claude | `~/.claude/projects` (including `subagents/`) | enabled |
+| Codex, OpenCode | — | disabled, parsers not implemented yet |
+
+Only files whose size or modification time changed are re-parsed. Claude stores cost once per
+session, so per-message Claude costs are **prorated estimates** from the session total by token share.
+
 ## Build and Install
 
 ```sh

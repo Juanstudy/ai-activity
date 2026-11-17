@@ -10,13 +10,20 @@ HEADERS += \
     ../src/storage.h \
     ../src/trmclient.h \
     ../src/theme.h \
-    ../src/backend.h
+    ../src/backend.h \
+    ../src/parsers/usageparser.h \
+    ../src/parsers/pishapedparser.h \
+    ../src/parsers/claudeparser.h \
+    ../src/parsers/sourceregistry.h
 
 SOURCES += \
     ../src/storage.cpp \
     ../src/trmclient.cpp \
     ../src/theme.cpp \
     ../src/backend.cpp \
+    ../src/parsers/pishapedparser.cpp \
+    ../src/parsers/claudeparser.cpp \
+    ../src/parsers/sourceregistry.cpp \
     ai-activity_tests.cpp
 
 RESOURCES += ../src/resources.qrc

@@ -7,6 +7,8 @@
 #include <QVariantList>
 #include <QVariantMap>
 
+#include "parsers/usageparser.h"
+
 class QSqlQuery;
 
 struct UsageSummary {
@@ -42,6 +44,10 @@ public:
     bool init();
     int syncFromPiSessions(const QString &customSessionsDir = {});
 
+    // Parse one source through its parser, skip files whose stamp is unchanged,
+    // and record fresh stamps only after a successful insert. Returns inserted rows.
+    int syncSource(const QString &source, const UsageParser &parser, const QString &rootPath);
+
     UsageSummary getSummary(qint64 startTimeMs, qint64 endTimeMs) const;
     StreakInfo getStreak(const QDate &referenceDate = QDate::currentDate()) const;
     QVariantList getHeatmapDays(qint64 startTimeMs, qint64 endTimeMs) const;
@@ -58,6 +64,7 @@ private:
 
     FileSyncState fileSyncState(const QString &source, const QString &filePath) const;
     bool setFileSyncState(const QString &source, const QString &filePath, qint64 mtime, qint64 size);
+    int insertEvents(const QList<NormalizedEvent> &events);
 
     QString m_connectionName;
     QString m_dbPath;
