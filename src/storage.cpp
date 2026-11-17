@@ -1,5 +1,7 @@
 #include "storage.h"
 
+#include <algorithm>
+
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
@@ -93,11 +95,12 @@ QString Storage::extractProjectFromDirName(const QString &dirName) {
         return parts.isEmpty() ? "Subagent" : QString("Agent (%1)").arg(parts.last());
     }
 
-    if (raw == "home-juan" || raw == "home")
+    const QString userName = QFileInfo(QDir::homePath()).fileName();
+    const QString homePrefix = "home-" + userName + "-";
+    if (raw == "home-" + userName || raw == "home")
         return "Home";
 
-    const QString homePrefix = "home-juan-";
-    if (raw.startsWith(homePrefix)) {
+    if (!userName.isEmpty() && raw.startsWith(homePrefix)) {
         raw = raw.mid(homePrefix.length());
     } else if (raw.startsWith("home-")) {
         int secondDash = raw.indexOf('-', 5);
@@ -127,7 +130,10 @@ int Storage::syncFromPiSessions(const QString &customSessionsDir) {
         return 0;
 
     int newRecords = 0;
-    m_db.transaction();
+    if (!m_db.transaction()) {
+        qWarning() << "Failed to start database transaction:" << m_db.lastError().text();
+        return 0;
+    }
 
     QSqlQuery insertQuery(m_db);
     insertQuery.prepare(R"(
@@ -243,7 +249,11 @@ int Storage::syncFromPiSessions(const QString &customSessionsDir) {
         }
     }
 
-    m_db.commit();
+    if (!m_db.commit()) {
+        qWarning() << "Failed to commit database transaction:" << m_db.lastError().text();
+        m_db.rollback();
+        return 0;
+    }
     return newRecords;
 }
 
@@ -341,8 +351,6 @@ StreakInfo Storage::getStreak(const QDate &referenceDate) const {
             currentRun = 1;
         } else if (d == prev.addDays(1)) {
             currentRun++;
-        } else if (d == prev) {
-            // Duplicate date, skip
         } else {
             currentRun = 1;
         }
@@ -350,7 +358,7 @@ StreakInfo Storage::getStreak(const QDate &referenceDate) const {
         prev = d;
     }
 
-    info.maxStreak = std::max(longest, info.currentStreak);
+    info.maxStreak = longest;
     return info;
 }
 

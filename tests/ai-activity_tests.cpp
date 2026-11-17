@@ -1,6 +1,8 @@
 #include <QtTest>
 #include <QTemporaryDir>
+#include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QSqlQuery>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -15,8 +17,10 @@ class AiActivityTests : public QObject {
 
 private slots:
     void testProjectNameExtraction();
+    void testProjectNameExtractionPortable();
     void testStorageInitAndParsing();
     void testTrmConversion();
+    void testTrmAutoSyncOptOut();
     void testThemeAccentDefault();
     void testThemeScaleAndDp();
     void testStreakCalculation();
@@ -30,6 +34,25 @@ void AiActivityTests::testProjectNameExtraction() {
     QCOMPARE(Storage::extractProjectFromDirName("--home-juan-Projects-ai-activity--"), QString("Projects/ai-activity"));
     QCOMPARE(Storage::extractProjectFromDirName("--home-juan--"), QString("Home"));
     QVERIFY(Storage::extractProjectFromDirName("--home-juan-OpenBot-Agents-agent-123--").contains("Agent"));
+}
+
+void AiActivityTests::testProjectNameExtractionPortable() {
+    const QByteArray originalHome = qgetenv("HOME");
+    qputenv("HOME", "/home/portableuser");
+
+    const QString homeName = QFileInfo(QDir::homePath()).fileName();
+    const QString homeDir = Storage::extractProjectFromDirName(QString("--home-%1--").arg(homeName));
+    const QString projectDir = Storage::extractProjectFromDirName(
+        QString("--home-%1-Projects-ai-activity--").arg(homeName));
+
+    if (originalHome.isEmpty())
+        qunsetenv("HOME");
+    else
+        qputenv("HOME", originalHome);
+
+    QCOMPARE(homeName, QString("portableuser"));
+    QCOMPARE(homeDir, QString("Home"));
+    QCOMPARE(projectDir, QString("Projects/ai-activity"));
 }
 
 void AiActivityTests::testStorageInitAndParsing() {
@@ -93,9 +116,34 @@ void AiActivityTests::testTrmConversion() {
     f.write("{\"rate\":4200.0,\"timestamp\":\"2026-01-01T00:00:00\"}");
     f.close();
 
-    TrmClient client(trmCache);
+    TrmClient client(trmCache, nullptr, false);
     QCOMPARE(client.rate(), 4200.0);
     QCOMPARE(client.convertUsdToCop(10.0), 42000.0);
+}
+
+void AiActivityTests::testTrmAutoSyncOptOut() {
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+
+    const QString trmCache = tempDir.path() + "/trm.json";
+    QFile f(trmCache);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write("{\"rate\":4200.0,\"timestamp\":\"2026-01-01T00:00:00\"}");
+    f.close();
+
+    // Opt-out keeps the cached rate and starts no request even when the cache is stale.
+    TrmClient client(trmCache, nullptr, false);
+    QCOMPARE(client.rate(), 4200.0);
+    QVERIFY(!client.isSyncing());
+
+    // Opt-out keeps the offline default when no cache exists.
+    TrmClient fresh(tempDir.path() + "/missing.json", nullptr, false);
+    QCOMPARE(fresh.rate(), 4100.0);
+    QVERIFY(!fresh.isSyncing());
+
+    // Backend threads the same opt-out through to its TRM client.
+    Backend backend(tempDir.path() + "/test_optout.db", tempDir.path(), nullptr, false);
+    QVERIFY(!backend.isSyncing());
 }
 
 void AiActivityTests::testThemeAccentDefault() {
@@ -187,7 +235,7 @@ void AiActivityTests::testNumberFormatting() {
     QTemporaryDir tempDir;
     QVERIFY(tempDir.isValid());
 
-    Backend backend(tempDir.path() + "/test_fmt.db", tempDir.path());
+    Backend backend(tempDir.path() + "/test_fmt.db", tempDir.path(), nullptr, false);
 
     // Test compact formatting without scientific notation
     QCOMPARE(backend.formatCompact(363073000), QString("363.07M"));
@@ -207,7 +255,7 @@ void AiActivityTests::testRangeSwitching() {
     QTemporaryDir tempDir;
     QVERIFY(tempDir.isValid());
 
-    Backend backend(tempDir.path() + "/test_range.db", tempDir.path());
+    Backend backend(tempDir.path() + "/test_range.db", tempDir.path(), nullptr, false);
     QCOMPARE(backend.currentRange(), QString("7d"));
 
     // Test Q_INVOKABLE setRange
@@ -230,7 +278,7 @@ void AiActivityTests::testQmlLoadsCleanly() {
     QVERIFY(tempDir.isValid());
 
     Theme theme(tempDir.path());
-    Backend backend(tempDir.path() + "/test_qml.db", tempDir.path());
+    Backend backend(tempDir.path() + "/test_qml.db", tempDir.path(), nullptr, false);
 
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty("theme", &theme);

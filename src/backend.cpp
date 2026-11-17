@@ -3,11 +3,11 @@
 #include <QDateTime>
 #include <QDebug>
 
-Backend::Backend(const QString &dbPath, const QString &customSessionsDir, QObject *parent)
+Backend::Backend(const QString &dbPath, const QString &customSessionsDir, QObject *parent, bool autoSyncTrm)
     : QObject(parent),
       m_sessionsDir(customSessionsDir),
       m_storage(dbPath, this),
-      m_trm(dbPath.isEmpty() ? QString() : dbPath + ".trm.json", this) {
+      m_trm(dbPath.isEmpty() ? QString() : dbPath + ".trm.json", this, autoSyncTrm) {
 
     connect(&m_trm, &TrmClient::rateChanged, this, &Backend::dataChanged);
     connect(&m_trm, &TrmClient::syncingChanged, this, &Backend::dataChanged);

@@ -12,7 +12,8 @@ class TrmClient : public QObject {
     Q_PROPERTY(QString lastSyncTime READ lastSyncTime NOTIFY rateChanged)
 
 public:
-    explicit TrmClient(const QString &cacheFilePath = {}, QObject *parent = nullptr);
+    explicit TrmClient(const QString &cacheFilePath = {}, QObject *parent = nullptr,
+                       bool autoSync = true);
     ~TrmClient() override = default;
 
     double rate() const { return m_rate; }
@@ -37,5 +38,6 @@ private:
     double m_rate = 4100.0;
     QDateTime m_lastSync;
     bool m_isSyncing = false;
+    bool m_autoSync = true;
     QNetworkAccessManager *m_nam = nullptr;
 };

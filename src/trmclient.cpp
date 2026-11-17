@@ -7,9 +7,10 @@
 #include <QUrl>
 #include <QDebug>
 
-TrmClient::TrmClient(const QString &cacheFilePath, QObject *parent)
+TrmClient::TrmClient(const QString &cacheFilePath, QObject *parent, bool autoSync)
     : QObject(parent),
-      m_cacheFile(cacheFilePath) {
+      m_cacheFile(cacheFilePath),
+      m_autoSync(autoSync) {
     if (m_cacheFile.isEmpty()) {
         const QString dataDir = QDir::homePath() + "/.local/share/ai-activity";
         QDir().mkpath(dataDir);
@@ -20,8 +21,8 @@ TrmClient::TrmClient(const QString &cacheFilePath, QObject *parent)
     connect(m_nam, &QNetworkAccessManager::finished, this, &TrmClient::onReplyFinished);
 
     loadCache();
-    // If cache is empty or older than 12 hours, trigger sync
-    if (m_lastSync.isNull() || m_lastSync.secsTo(QDateTime::currentDateTime()) > 12 * 3600) {
+    // If cache is empty or older than 12 hours, trigger sync unless the caller opted out.
+    if (m_autoSync && (m_lastSync.isNull() || m_lastSync.secsTo(QDateTime::currentDateTime()) > 12 * 3600)) {
         syncRate();
     }
 }
@@ -54,13 +55,18 @@ void TrmClient::loadCache() {
 
 void TrmClient::saveCache(double rate, const QDateTime &timestamp) {
     QFile file(m_cacheFile);
-    if (!file.open(QIODevice::WriteOnly))
+    if (!file.open(QIODevice::WriteOnly)) {
+        qWarning() << "Failed to open TRM cache for writing:" << m_cacheFile << file.errorString();
         return;
+    }
 
     QJsonObject obj;
     obj["rate"] = rate;
     obj["timestamp"] = timestamp.toString(Qt::ISODate);
-    file.write(QJsonDocument(obj).toJson(QJsonDocument::Compact));
+    const QByteArray json = QJsonDocument(obj).toJson(QJsonDocument::Compact);
+    if (file.write(json) != json.size()) {
+        qWarning() << "Failed to write TRM cache:" << m_cacheFile << file.errorString();
+    }
 }
 
 void TrmClient::syncRate() {

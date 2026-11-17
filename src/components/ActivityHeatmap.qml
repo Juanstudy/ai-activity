@@ -187,7 +187,12 @@ Rectangle {
                 boundsBehavior: Flickable.StopAtBounds
 
                 Row {
-                    anchors.horizontalCenter: gridFlickable.width > (root.weeksCount * (root.cellSize + root.cellSpacing)) ? parent.horizontalCenter : undefined
+                    // Center the grid only while it fits the viewport; otherwise keep it
+                    // flush left so flicking can reveal the remaining weeks.
+                    x: {
+                        var gridWidth = root.weeksCount * root.cellSize + (root.weeksCount - 1) * root.cellSpacing
+                        return gridFlickable.width > gridWidth ? (gridFlickable.width - gridWidth) / 2 : 0
+                    }
                     spacing: root.cellSpacing
 
                     Repeater {

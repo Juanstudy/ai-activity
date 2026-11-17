@@ -34,7 +34,8 @@ class Backend : public QObject {
     Q_PROPERTY(QVariantList agentBreakdown READ agentBreakdown NOTIFY dataChanged)
 
 public:
-    explicit Backend(const QString &dbPath = {}, const QString &customSessionsDir = {}, QObject *parent = nullptr);
+    explicit Backend(const QString &dbPath = {}, const QString &customSessionsDir = {},
+                     QObject *parent = nullptr, bool autoSyncTrm = true);
     ~Backend() override = default;
 
     QString currentRange() const { return m_currentRange; }
