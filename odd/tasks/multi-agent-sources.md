@@ -77,6 +77,11 @@ breakdown groups only Pi data. Research confirmed real local data for all four a
   `~/.codex/sessions/**/*.jsonl.zst`. Needs a zstd dependency decision (link `libzstd` vs shell
   out to `zstd -dc`). Token fields exist in `token_usage_record.payload.usage`; **no cost data
   exists** — display "not reported", never fabricate. Subagent signal unverified.
+- [ ] **MAS-8** (deferred UI bug, GitHub issue #3) Agents breakdown shows only one agent:
+  `Main.qml:694-697` caps the panel at `implicitHeight: theme.dp(136)` /
+  `Layout.maximumHeight: theme.dp(160)` while Models uses `Layout.fillHeight: true`; rows are
+  inside a `Flickable` (`BreakdownList.qml:114-117`), so the rest require inner scrolling.
+  Issue: https://github.com/Juanstudy/ai-activity/issues/3
 
 ## Acceptance criteria
 
@@ -165,6 +170,13 @@ Slice 1 is complete and verified. The two unchecked items above are the pending 
 
 Research notes and per-source field maps are persisted in Engram under topic
 `architecture/agent-sources`. The full research handoff is reachable from that project memory.
+
+## Deferred UI bug (2026-11-17)
+
+- GitHub issue #3: https://github.com/Juanstudy/ai-activity/issues/3 — Agents breakdown is
+  height-capped and requires inner scrolling to see more than one agent. Verified in code at
+  `src/Main.qml:694-697` and `src/components/BreakdownList.qml:114-117`. Intentionally deferred
+  so the source work can land first; tracked as MAS-8 above.
 
 ## Delivery
 
