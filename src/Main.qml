@@ -661,7 +661,7 @@ ApplicationWindow {
                 // ── BREAKDOWN PANELS (Asymmetric 60/40 Layout) ──
                 RowLayout {
                     Layout.fillWidth: true
-                    implicitHeight: theme.dp(450)
+                    implicitHeight: theme.dp(520)
                     spacing: theme.dp(14)
 
                     // Left Column: Projects (60% width, generous space for long paths)
@@ -688,13 +688,12 @@ ApplicationWindow {
                             Layout.fillHeight: true
                         }
 
-                        // Agents Breakdown (Compact panel sized for focused agent list)
+                        // Agents Breakdown (Grows dynamically with agent count to avoid inner scrolling)
                         BreakdownList {
                             title: "agents"
                             items: backend.agentBreakdown
                             Layout.fillWidth: true
-                            implicitHeight: theme.dp(136)
-                            Layout.maximumHeight: theme.dp(160)
+                            Layout.preferredHeight: Math.min(theme.dp(300), Math.max(theme.dp(126), theme.dp(68) + items.length * theme.dp(58)))
                         }
                     }
                 }

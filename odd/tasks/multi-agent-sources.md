@@ -78,10 +78,11 @@ breakdown groups only Pi data. Research confirmed real local data for all four a
   `~/.codex/sessions/**/*.jsonl.zst`. Needs a zstd dependency decision (link `libzstd` vs shell
   out to `zstd -dc`). Token fields exist in `token_usage_record.payload.usage`; **no cost data
   exists** — display "not reported", never fabricate. Subagent signal unverified.
-- [ ] **MAS-8** (deferred UI bug, GitHub issue #3) Agents breakdown shows only one agent:
-  `Main.qml:694-697` caps the panel at `implicitHeight: theme.dp(136)` /
-  `Layout.maximumHeight: theme.dp(160)` while Models uses `Layout.fillHeight: true`; rows are
-  inside a `Flickable` (`BreakdownList.qml:114-117`), so the rest require inner scrolling.
+- [x] **MAS-8** (resolved UI bug, GitHub issue #3) Agents breakdown shows only one agent:
+  Removed the rigid `Layout.maximumHeight: theme.dp(160)` / `implicitHeight: theme.dp(136)` on
+  `Main.qml:694-697`, increased breakdown `RowLayout` implicitHeight to `theme.dp(520)`, and gave
+  Agents a content-aware `Layout.preferredHeight` (~68dp header + 58dp per row, max 300dp) so up
+  to 4-5 agents display with zero inner scrolling while Models flexes into the remaining space.
   Issue: https://github.com/Juanstudy/ai-activity/issues/3
 
 ## Acceptance criteria
