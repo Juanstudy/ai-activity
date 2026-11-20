@@ -122,10 +122,14 @@ Rectangle {
                 height: theme.dp(54)
                 radius: theme.dp(6)
                 color: itemMouse.containsMouse ? "#1c1b1f" : "transparent"
-                opacity: modelData.costUsd > 0 ? 1.0 : 0.40
+                opacity: itemMouse.containsMouse ? 1.0 : (modelData.costUsd > 0 ? 1.0 : 0.72)
 
                 Behavior on color {
                     ColorAnimation { duration: 100 }
+                }
+
+                Behavior on opacity {
+                    NumberAnimation { duration: 100 }
                 }
 
                 readonly property var pathObj: root.splitPath(modelData.name)
