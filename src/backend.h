@@ -5,8 +5,12 @@
 #include <QVariantList>
 #include <QVariantMap>
 
+#include <memory>
+
 #include "storage.h"
 #include "trmclient.h"
+
+class SourceRegistry;
 
 class Backend : public QObject {
     Q_OBJECT
@@ -35,8 +39,9 @@ class Backend : public QObject {
 
 public:
     explicit Backend(const QString &dbPath = {}, const QString &customSessionsDir = {},
-                     QObject *parent = nullptr, bool autoSyncTrm = true);
-    ~Backend() override = default;
+                     QObject *parent = nullptr, bool autoSyncTrm = true,
+                     SourceRegistry *registry = nullptr);
+    ~Backend() override;
 
     QString currentRange() const { return m_currentRange; }
     Q_INVOKABLE void setRange(const QString &range);
@@ -80,6 +85,8 @@ private:
     QString m_sessionsDir;
     Storage m_storage;
     TrmClient m_trm;
+    SourceRegistry *m_registry = nullptr;
+    std::unique_ptr<SourceRegistry> m_ownedRegistry;
 
     QString m_currentRange = "7d";
     UsageSummary m_summary;

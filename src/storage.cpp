@@ -11,8 +11,75 @@
 #include <QJsonObject>
 #include <QSqlQuery>
 #include <QSqlError>
+#include <QStringList>
 #include <QUuid>
 #include <QDebug>
+
+namespace {
+
+// The events table now carries a source dimension. Dedupe is scoped to
+// (source, message_id) so two CLIs can emit the same message id without one
+// silently overwriting the other.
+const char *const kCreateEventsSql = R"(
+    CREATE TABLE IF NOT EXISTS events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT,
+        message_id TEXT,
+        timestamp INTEGER,
+        date TEXT,
+        project TEXT,
+        agent TEXT,
+        model TEXT,
+        provider TEXT,
+        tokens_in INTEGER,
+        tokens_out INTEGER,
+        tokens_reasoning INTEGER,
+        tokens_total INTEGER,
+        cost_usd REAL,
+        is_subagent INTEGER,
+        source TEXT NOT NULL DEFAULT 'pi',
+        UNIQUE(source, message_id)
+    );
+)";
+
+const char *const kCreateSyncStateSql = R"(
+    CREATE TABLE IF NOT EXISTS sync_state (
+        source TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        mtime INTEGER NOT NULL,
+        size INTEGER NOT NULL,
+        PRIMARY KEY (source, file_path)
+    );
+)";
+
+const char *const kEventIndexes[] = {
+    "CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp);",
+    "CREATE INDEX IF NOT EXISTS idx_events_date ON events(date);",
+    "CREATE INDEX IF NOT EXISTS idx_events_project ON events(project);",
+    "CREATE INDEX IF NOT EXISTS idx_events_model ON events(model);",
+};
+
+// Backfills every legacy row as Pi history while preserving ids and values.
+const char *const kCopyLegacyEventsSql = R"(
+    INSERT INTO events (
+        id, session_id, message_id, timestamp, date, project, agent, model, provider,
+        tokens_in, tokens_out, tokens_reasoning, tokens_total, cost_usd, is_subagent, source
+    )
+    SELECT
+        id, session_id, message_id, timestamp, date, project, agent, model, provider,
+        tokens_in, tokens_out, tokens_reasoning, tokens_total, cost_usd, is_subagent, 'pi'
+    FROM events_legacy;
+)";
+
+bool createEventIndexes(QSqlQuery *query) {
+    for (const char *sql : kEventIndexes) {
+        if (!query->exec(sql))
+            return false;
+    }
+    return true;
+}
+
+}  // namespace
 
 Storage::Storage(const QString &dbPath, QObject *parent)
     : QObject(parent),
@@ -43,36 +110,139 @@ bool Storage::init() {
     q.exec("PRAGMA journal_mode = WAL;");
     q.exec("PRAGMA synchronous = NORMAL;");
 
-    const QString createEvents = R"(
-        CREATE TABLE IF NOT EXISTS events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_id TEXT,
-            message_id TEXT UNIQUE,
-            timestamp INTEGER,
-            date TEXT,
-            project TEXT,
-            agent TEXT,
-            model TEXT,
-            provider TEXT,
-            tokens_in INTEGER,
-            tokens_out INTEGER,
-            tokens_reasoning INTEGER,
-            tokens_total INTEGER,
-            cost_usd REAL,
-            is_subagent INTEGER
-        );
-    )";
-
-    if (!q.exec(createEvents)) {
+    // A fresh database gets the new schema directly. On a legacy database this
+    // is a no-op and the migration below rebuilds the table instead.
+    if (!q.exec(kCreateEventsSql)) {
         qWarning() << "Failed to create events table:" << q.lastError().text();
         return false;
     }
 
-    q.exec("CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp);");
-    q.exec("CREATE INDEX IF NOT EXISTS idx_events_date ON events(date);");
-    q.exec("CREATE INDEX IF NOT EXISTS idx_events_project ON events(project);");
-    q.exec("CREATE INDEX IF NOT EXISTS idx_events_model ON events(model);");
+    if (!eventsHaveColumn(&q, "events", "source")) {
+        if (!migrateEventsToSourceSchema(&q)) {
+            qWarning() << "Failed to migrate events table to the source schema for" << m_dbPath;
+            return false;
+        }
+    } else if (!eventsHaveCompositeUnique(&q)) {
+        // Never add a weaker dedupe key or rewrite rows in place here: that
+        // could silently drop history. Log loudly and leave the data intact.
+        qWarning() << "events has a source column but no UNIQUE(source, message_id); "
+                      "message-id dedupe is not enforced for" << m_dbPath;
+    }
 
+    if (!createEventIndexes(&q)) {
+        qWarning() << "Failed to create events indexes:" << q.lastError().text();
+        return false;
+    }
+
+    if (!q.exec(kCreateSyncStateSql)) {
+        qWarning() << "Failed to create sync_state table:" << q.lastError().text();
+        return false;
+    }
+
+    return true;
+}
+
+bool Storage::eventsHaveColumn(QSqlQuery *query, const QString &table, const QString &column) const {
+    if (!query->exec(QString("PRAGMA table_info(%1);").arg(table)))
+        return false;
+    while (query->next()) {
+        if (query->value("name").toString() == column)
+            return true;
+    }
+    return false;
+}
+
+bool Storage::eventsHaveCompositeUnique(QSqlQuery *query) const {
+    QStringList uniqueIndexes;
+    if (!query->exec("PRAGMA index_list(events);"))
+        return false;
+    while (query->next()) {
+        if (query->value("unique").toBool())
+            uniqueIndexes << query->value("name").toString();
+    }
+
+    // Reuse the same query object for each index; the previous result set has
+    // been fully consumed above.
+    for (const QString &indexName : uniqueIndexes) {
+        if (!query->exec(QString("PRAGMA index_info(%1);").arg(indexName)))
+            continue;
+        QStringList columns;
+        while (query->next())
+            columns << query->value("name").toString();
+        if (columns.size() == 2 && columns.contains("source") && columns.contains("message_id"))
+            return true;
+    }
+    return false;
+}
+
+bool Storage::migrateEventsToSourceSchema(QSqlQuery *query) {
+    if (!m_db.transaction()) {
+        qWarning() << "Failed to start migration transaction:" << m_db.lastError().text();
+        return false;
+    }
+
+    auto execStep = [query](const QString &sql, const char *what) -> bool {
+        if (!query->exec(sql)) {
+            qWarning() << what << query->lastError().text();
+            return false;
+        }
+        return true;
+    };
+
+    const bool rebuilt =
+        execStep("ALTER TABLE events RENAME TO events_legacy;", "Failed to rename legacy events table:") &&
+        execStep(kCreateEventsSql, "Failed to create new events table:") &&
+        execStep(kCopyLegacyEventsSql, "Failed to copy legacy events rows:") &&
+        execStep("DROP TABLE events_legacy;", "Failed to drop legacy events table:");
+
+    if (!rebuilt) {
+        m_db.rollback();
+        return false;
+    }
+
+    if (!createEventIndexes(query)) {
+        qWarning() << "Failed to recreate events indexes during migration:" << query->lastError().text();
+        m_db.rollback();
+        return false;
+    }
+
+    if (!m_db.commit()) {
+        qWarning() << "Failed to commit migration transaction:" << m_db.lastError().text();
+        m_db.rollback();
+        return false;
+    }
+    return true;
+}
+
+FileSyncState Storage::fileSyncState(const QString &source, const QString &filePath) const {
+    FileSyncState state;
+    QSqlQuery q(m_db);
+    q.prepare("SELECT mtime, size FROM sync_state WHERE source = :source AND file_path = :path;");
+    q.bindValue(":source", source);
+    q.bindValue(":path", filePath);
+    if (q.exec() && q.next()) {
+        state.found = true;
+        state.mtime = q.value("mtime").toLongLong();
+        state.size = q.value("size").toLongLong();
+    }
+    return state;
+}
+
+bool Storage::setFileSyncState(const QString &source, const QString &filePath, qint64 mtime, qint64 size) {
+    QSqlQuery q(m_db);
+    q.prepare(R"(
+        INSERT INTO sync_state (source, file_path, mtime, size)
+        VALUES (:source, :path, :mtime, :size)
+        ON CONFLICT(source, file_path) DO UPDATE SET mtime = excluded.mtime, size = excluded.size;
+    )");
+    q.bindValue(":source", source);
+    q.bindValue(":path", filePath);
+    q.bindValue(":mtime", mtime);
+    q.bindValue(":size", size);
+    if (!q.exec()) {
+        qWarning() << "Failed to record sync state for" << filePath << q.lastError().text();
+        return false;
+    }
     return true;
 }
 
@@ -139,10 +309,10 @@ int Storage::syncFromPiSessions(const QString &customSessionsDir) {
     insertQuery.prepare(R"(
         INSERT OR IGNORE INTO events (
             session_id, message_id, timestamp, date, project, agent, model, provider,
-            tokens_in, tokens_out, tokens_reasoning, tokens_total, cost_usd, is_subagent
+            tokens_in, tokens_out, tokens_reasoning, tokens_total, cost_usd, is_subagent, source
         ) VALUES (
             :session_id, :message_id, :timestamp, :date, :project, :agent, :model, :provider,
-            :tokens_in, :tokens_out, :tokens_reasoning, :tokens_total, :cost_usd, :is_subagent
+            :tokens_in, :tokens_out, :tokens_reasoning, :tokens_total, :cost_usd, :is_subagent, :source
         );
     )");
 
@@ -241,6 +411,7 @@ int Storage::syncFromPiSessions(const QString &customSessionsDir) {
                 insertQuery.bindValue(":tokens_total", totalTokens > 0 ? totalTokens : (inTokens + outTokens));
                 insertQuery.bindValue(":cost_usd", costUsd);
                 insertQuery.bindValue(":is_subagent", isSubagent ? 1 : 0);
+                insertQuery.bindValue(":source", "pi");
 
                 if (insertQuery.exec() && insertQuery.numRowsAffected() > 0) {
                     newRecords++;
@@ -255,6 +426,76 @@ int Storage::syncFromPiSessions(const QString &customSessionsDir) {
         return 0;
     }
     return newRecords;
+}
+
+int Storage::insertEvents(const QList<NormalizedEvent> &events) {
+    if (!m_db.transaction()) {
+        qWarning() << "Failed to start insert transaction:" << m_db.lastError().text();
+        return -1;
+    }
+
+    QSqlQuery insertQuery(m_db);
+    insertQuery.prepare(R"(
+        INSERT OR IGNORE INTO events (
+            session_id, message_id, timestamp, date, project, agent, model, provider,
+            tokens_in, tokens_out, tokens_reasoning, tokens_total, cost_usd, is_subagent, source
+        ) VALUES (
+            :session_id, :message_id, :timestamp, :date, :project, :agent, :model, :provider,
+            :tokens_in, :tokens_out, :tokens_reasoning, :tokens_total, :cost_usd, :is_subagent, :source
+        );
+    )");
+
+    int inserted = 0;
+    for (const NormalizedEvent &event : events) {
+        insertQuery.bindValue(":session_id", event.sessionId);
+        insertQuery.bindValue(":message_id", event.messageId);
+        insertQuery.bindValue(":timestamp", event.timestampMs);
+        insertQuery.bindValue(":date", QDateTime::fromMSecsSinceEpoch(event.timestampMs).toString("yyyy-MM-dd"));
+        insertQuery.bindValue(":project", event.project);
+        insertQuery.bindValue(":agent", event.agent);
+        insertQuery.bindValue(":model", event.model);
+        insertQuery.bindValue(":provider", event.provider);
+        insertQuery.bindValue(":tokens_in", event.tokensIn);
+        insertQuery.bindValue(":tokens_out", event.tokensOut);
+        insertQuery.bindValue(":tokens_reasoning", event.tokensReasoning);
+        insertQuery.bindValue(":tokens_total", event.tokensTotal);
+        insertQuery.bindValue(":cost_usd", event.costUsd);
+        insertQuery.bindValue(":is_subagent", event.isSubagent ? 1 : 0);
+        insertQuery.bindValue(":source", event.source);
+
+        if (!insertQuery.exec()) {
+            qWarning() << "Failed to insert event" << event.messageId << insertQuery.lastError().text();
+            m_db.rollback();
+            return -1;
+        }
+        if (insertQuery.numRowsAffected() > 0)
+            inserted++;
+    }
+
+    if (!m_db.commit()) {
+        qWarning() << "Failed to commit insert transaction:" << m_db.lastError().text();
+        m_db.rollback();
+        return -1;
+    }
+    return inserted;
+}
+
+int Storage::syncSource(const QString &source, const UsageParser &parser, const QString &rootPath) {
+    FileSkipPredicate shouldSkip = [this, &source](const QString &filePath, qint64 mtime, qint64 size) {
+        const FileSyncState state = fileSyncState(source, filePath);
+        return state.found && state.mtime == mtime && state.size == size;
+    };
+
+    const ParseResult result = parser.parse(rootPath, shouldSkip);
+    const int inserted = insertEvents(result.events);
+    if (inserted < 0)
+        return 0;
+
+    // Stamps are only durable once the rows are committed, so a crash before
+    // the insert cannot leave a file marked as synced with missing events.
+    for (const FileStamp &stamp : result.files)
+        setFileSyncState(source, stamp.filePath, stamp.mtime, stamp.size);
+    return inserted;
 }
 
 UsageSummary Storage::getSummary(qint64 startTimeMs, qint64 endTimeMs) const {
