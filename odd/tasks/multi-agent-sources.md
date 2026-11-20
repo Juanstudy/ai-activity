@@ -68,11 +68,12 @@ breakdown groups only Pi data. Research confirmed real local data for all four a
   source flags, keep the existing Pi path working, and document the new sources in README.
 - [x] **MAS-5** Verify: full `bin/test`, clean `bin/build`, `git diff --check`, structural
   readback, and work-unit commits.
-- [ ] **MAS-6** (next slice) OpenCode source: read-only SQLite parser for
-  `~/.local/share/opencode/opencode.db`. Use `session.cost`, `tokens_input`, `tokens_output`,
+- [x] **MAS-6** OpenCode source: read-only SQLite parser for
+  `~/.local/share/opencode/opencode.db`. Uses `session.cost`, `tokens_input`, `tokens_output`,
   `tokens_reasoning`, `tokens_cache_read`, `tokens_cache_write`, `model`, `agent`, `time_created`;
-  parse `message.data` JSON for per-message granularity. Open with `mode=ro` because of WAL.
-  `session.parent_id` is currently empty, so subagent detection is unverified.
+  parses `message.data` JSON for per-message granularity. Opened with `mode=ro` (via
+  `QSQLITE_OPEN_READONLY`) alongside WAL. Subagent detection via `session.parent_id` and agent label.
+  Prorates session cost if per-message costs are unassigned. Incremental sync keyed on db+wal stamps.
 - [ ] **MAS-7** (later slice) Codex source: zstd-compressed JSONL under
   `~/.codex/sessions/**/*.jsonl.zst`. Needs a zstd dependency decision (link `libzstd` vs shell
   out to `zstd -dc`). Token fields exist in `token_usage_record.payload.usage`; **no cost data

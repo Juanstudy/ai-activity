@@ -23,9 +23,10 @@ Backend::Backend(const QString &dbPath, const QString &customSessionsDir, QObjec
         m_registry = m_ownedRegistry.get();
         if (!customSessionsDir.isEmpty()) {
             // A custom sessions dir marks a hermetic caller. Restrict sync to Pi
-            // rooted there so tests never read the real ~/.omp or ~/.claude.
+            // rooted there so tests never read the real ~/.omp, ~/.claude, or ~/.local/share/opencode.
             m_registry->setEnabled("omp", false);
             m_registry->setEnabled("claude", false);
+            m_registry->setEnabled("opencode", false);
             m_registry->setRootPath("pi", customSessionsDir);
         }
     }

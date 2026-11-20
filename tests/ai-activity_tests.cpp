@@ -20,6 +20,7 @@
 #include "backend.h"
 #include "parsers/pishapedparser.h"
 #include "parsers/claudeparser.h"
+#include "parsers/opencodeparser.h"
 #include "parsers/sourceregistry.h"
 
 namespace {
@@ -72,6 +73,7 @@ private slots:
     void testSourceScopedMessageId();
     void testOmpParser();
     void testClaudeParser();
+    void testOpenCodeParser();
     void testIncrementalSync();
     void testRegistryDisabledSources();
     void testBackendSourceWiring();
@@ -601,6 +603,120 @@ void AiActivityTests::testClaudeParser() {
     QVERIFY(qAbs(proratedSum - 0.09) < 1e-9);
 }
 
+void AiActivityTests::testOpenCodeParser() {
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+
+    const QString root = tempDir.path() + "/opencode";
+    QVERIFY(QDir().mkpath(root));
+    const QString dbPath = root + "/opencode.db";
+
+    {
+        QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", "fixture_test_opencode");
+        db.setDatabaseName(dbPath);
+        QVERIFY(db.open());
+        QSqlQuery q(db);
+        QVERIFY(q.exec("CREATE TABLE session ("
+                       "id TEXT PRIMARY KEY, parent_id TEXT, slug TEXT, directory TEXT, "
+                       "path TEXT, title TEXT, cost REAL DEFAULT 0);"));
+        QVERIFY(q.exec("CREATE TABLE message ("
+                       "id TEXT PRIMARY KEY, session_id TEXT, time_created INTEGER, data TEXT);"));
+
+        // Main session with cost 0.06 to be prorated
+        QVERIFY(q.exec("INSERT INTO session VALUES ('sess-main', NULL, 'main-slug', "
+                       "'/home/juan/Projects/sample-app', 'Projects/sample-app', 'Main Session', 0.06);"));
+
+        // Subagent session with parent_id set
+        QVERIFY(q.exec("INSERT INTO session VALUES ('sess-sub', 'sess-main', 'sub-slug', "
+                       "'/home/juan', '', 'Subagent Session', 0.0);"));
+
+        // msg 1: assistant in sess-main
+        const QString msg1Data =
+            "{\"role\":\"assistant\",\"modelID\":\"muse-spark\",\"providerID\":\"opencode\","
+            "\"cost\":0,\"path\":{\"cwd\":\"/home/juan/Projects/sample-app\"},"
+            "\"tokens\":{\"input\":100,\"output\":50,\"reasoning\":20,\"total\":185,"
+            "\"cache\":{\"read\":10,\"write\":5}}}";
+        q.prepare("INSERT INTO message VALUES ('msg-1', 'sess-main', 1700000000000, :data);");
+        q.bindValue(":data", msg1Data);
+        QVERIFY(q.exec());
+
+        // msg 2: assistant in sess-main
+        const QString msg2Data =
+            "{\"role\":\"assistant\",\"modelID\":\"muse-spark\",\"providerID\":\"opencode\","
+            "\"cost\":0,\"tokens\":{\"input\":200,\"output\":100,\"reasoning\":0,\"total\":300}}";
+        q.prepare("INSERT INTO message VALUES ('msg-2', 'sess-main', 1700000005000, :data);");
+        q.bindValue(":data", msg2Data);
+        QVERIFY(q.exec());
+
+        // msg 3: user role (must be ignored)
+        q.prepare("INSERT INTO message VALUES ('msg-user', 'sess-main', 1700000006000, '{\"role\":\"user\"}');");
+        QVERIFY(q.exec());
+
+        // msg 4: assistant in subagent session with individual cost 0.002
+        const QString msgSubData =
+            "{\"role\":\"assistant\",\"modelID\":\"claude-haiku\",\"providerID\":\"anthropic\","
+            "\"cost\":0.002,\"tokens\":{\"input\":10,\"output\":5,\"reasoning\":0,\"total\":15}}";
+        q.prepare("INSERT INTO message VALUES ('msg-sub', 'sess-sub', 1700000010000, :data);");
+        q.bindValue(":data", msgSubData);
+        QVERIFY(q.exec());
+
+        db.close();
+    }
+    QSqlDatabase::removeDatabase("fixture_test_opencode");
+
+    OpenCodeParser parser;
+    QCOMPARE(parser.source(), QString("opencode"));
+
+    // Skipping works if predicate returns true
+    const ParseResult skipped = parser.parse(root, [](const QString &, qint64, qint64) { return true; });
+    QCOMPARE(skipped.events.size(), 0);
+    QCOMPARE(skipped.files.size(), 0);
+
+    // Can parse either the directory or the db file directly
+    const ParseResult result = parser.parse(root, nullptr);
+    QCOMPARE(result.events.size(), 3);
+    QCOMPARE(result.files.size(), 1);
+    QCOMPARE(result.files.first().filePath, dbPath);
+
+    auto findEvent = [&result](const QString &id) {
+        for (const NormalizedEvent &event : result.events) {
+            if (event.messageId == id)
+                return event;
+        }
+        return NormalizedEvent();
+    };
+
+    const NormalizedEvent ev1 = findEvent("msg-1");
+    QCOMPARE(ev1.source, QString("opencode"));
+    QCOMPARE(ev1.sessionId, QString("sess-main"));
+    QCOMPARE(ev1.project, QString("Projects/sample-app"));
+    QCOMPARE(ev1.agent, QString("opencode"));
+    QCOMPARE(ev1.model, QString("muse-spark"));
+    QCOMPARE(ev1.provider, QString("opencode"));
+    QCOMPARE(ev1.tokensIn, 115LL);
+    QCOMPARE(ev1.tokensOut, 50LL);
+    QCOMPARE(ev1.tokensReasoning, 20LL);
+    QCOMPARE(ev1.tokensTotal, 185LL);
+    QCOMPARE(ev1.timestampMs, 1700000000000LL);
+    QVERIFY(!ev1.isSubagent);
+
+    const NormalizedEvent ev2 = findEvent("msg-2");
+    QCOMPARE(ev2.tokensIn, 200LL);
+    QCOMPARE(ev2.tokensOut, 100LL);
+    QCOMPARE(ev2.tokensTotal, 300LL);
+    QVERIFY(!ev2.isSubagent);
+
+    // Prorated costs: total tokens in sess-main = 185 + 300 = 485. Total cost = 0.06.
+    QVERIFY(qAbs((ev1.costUsd + ev2.costUsd) - 0.06) < 1e-9);
+
+    const NormalizedEvent evSub = findEvent("msg-sub");
+    QCOMPARE(evSub.sessionId, QString("sess-sub"));
+    QCOMPARE(evSub.agent, QString("subagent"));
+    QVERIFY(evSub.isSubagent);
+    QCOMPARE(evSub.project, QString("Home"));
+    QCOMPARE(evSub.costUsd, 0.002);
+}
+
 void AiActivityTests::testIncrementalSync() {
     QTemporaryDir tempDir;
     QVERIFY(tempDir.isValid());
@@ -630,6 +746,7 @@ void AiActivityTests::testIncrementalSync() {
     SourceRegistry registry(&storage);
     registry.setEnabled("pi", false);
     registry.setEnabled("claude", false);
+    registry.setEnabled("opencode", false);
     registry.setEnabled("omp", true);
     registry.setRootPath("omp", root);
     registry.setParser("omp", counting);
@@ -686,6 +803,7 @@ void AiActivityTests::testRegistryDisabledSources() {
     SourceRegistry registry(&storage);
     registry.setEnabled("pi", false);
     registry.setEnabled("claude", false);
+    registry.setEnabled("opencode", false);
     registry.setEnabled("omp", false);
     registry.setRootPath("omp", root);
     registry.setParser("omp", counting);
@@ -738,7 +856,22 @@ void AiActivityTests::testBackendSourceWiring() {
     writeRecord(home + "/.omp/agent/sessions/--home-juan-Projects-omp--/omp.jsonl", ompLine);
     writeRecord(home + "/.claude/projects/slug/session.jsonl", claudeLine);
 
-    // Production-like Backend: no custom dir means all three default sources.
+    {
+        QVERIFY(QDir().mkpath(home + "/.local/share/opencode"));
+        const QString ocDbPath = home + "/.local/share/opencode/opencode.db";
+        QSqlDatabase ocDb = QSqlDatabase::addDatabase("QSQLITE", "fixture_oc_wiring");
+        ocDb.setDatabaseName(ocDbPath);
+        QVERIFY(ocDb.open());
+        QSqlQuery q(ocDb);
+        QVERIFY(q.exec("CREATE TABLE session (id TEXT PRIMARY KEY, parent_id TEXT, slug TEXT, directory TEXT, path TEXT, title TEXT, cost REAL DEFAULT 0);"));
+        QVERIFY(q.exec("CREATE TABLE message (id TEXT PRIMARY KEY, session_id TEXT, time_created INTEGER, data TEXT);"));
+        QVERIFY(q.exec(QString("INSERT INTO session VALUES ('s-oc', NULL, 'slug-oc', '%1/Projects/sample', 'Projects/sample', 'Title', 0.001);").arg(home)));
+        QVERIFY(q.exec(QString("INSERT INTO message VALUES ('wired-oc', 's-oc', %1, '{\"role\":\"assistant\",\"tokens\":{\"input\":1,\"output\":1,\"total\":2}}');").arg(nowMs)));
+        ocDb.close();
+    }
+    QSqlDatabase::removeDatabase("fixture_oc_wiring");
+
+    // Production-like Backend: no custom dir means all default sources.
     Backend full(home + "/full.db", QString(), nullptr, false);
     QStringList fullAgents;
     for (const QVariant &item : full.agentBreakdown())
@@ -758,9 +891,11 @@ void AiActivityTests::testBackendSourceWiring() {
     QVERIFY(fullAgents.contains("pi"));
     QVERIFY(fullAgents.contains("omp"));
     QVERIFY(fullAgents.contains("claude"));
+    QVERIFY(fullAgents.contains("opencode"));
     QVERIFY(hermeticAgents.contains("pi"));
     QVERIFY(!hermeticAgents.contains("omp"));
     QVERIFY(!hermeticAgents.contains("claude"));
+    QVERIFY(!hermeticAgents.contains("opencode"));
 }
 
 QTEST_MAIN(AiActivityTests)

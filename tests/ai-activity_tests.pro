@@ -14,6 +14,7 @@ HEADERS += \
     ../src/parsers/usageparser.h \
     ../src/parsers/pishapedparser.h \
     ../src/parsers/claudeparser.h \
+    ../src/parsers/opencodeparser.h \
     ../src/parsers/sourceregistry.h
 
 SOURCES += \
@@ -23,6 +24,7 @@ SOURCES += \
     ../src/backend.cpp \
     ../src/parsers/pishapedparser.cpp \
     ../src/parsers/claudeparser.cpp \
+    ../src/parsers/opencodeparser.cpp \
     ../src/parsers/sourceregistry.cpp \
     ai-activity_tests.cpp
 

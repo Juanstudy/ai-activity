@@ -15,6 +15,7 @@ HEADERS += \
     src/parsers/usageparser.h \
     src/parsers/pishapedparser.h \
     src/parsers/claudeparser.h \
+    src/parsers/opencodeparser.h \
     src/parsers/sourceregistry.h
 
 SOURCES += \
@@ -26,6 +27,7 @@ SOURCES += \
     src/translator.cpp \
     src/parsers/pishapedparser.cpp \
     src/parsers/claudeparser.cpp \
+    src/parsers/opencodeparser.cpp \
     src/parsers/sourceregistry.cpp
 
 RESOURCES += src/resources.qrc

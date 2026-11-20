@@ -21,7 +21,8 @@ configurable root path, so sources are opt-in and overridable; the shipped defau
 | Pi | `~/.pi/agent/sessions` | enabled |
 | omp | `~/.omp/agent/sessions` | enabled |
 | Claude | `~/.claude/projects` (including `subagents/`) | enabled |
-| Codex, OpenCode | — | disabled, parsers not implemented yet |
+| OpenCode | `~/.local/share/opencode/opencode.db` | enabled |
+| Codex | — | disabled, parser not implemented yet |
 
 Only files whose size or modification time changed are re-parsed. Claude stores cost once per
 session, so per-message Claude costs are **prorated estimates** from the session total by token share.
