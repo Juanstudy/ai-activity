@@ -2,7 +2,6 @@
     <qresource prefix="/">
         <file>Main.qml</file>
         <file>components/TimeRangeBar.qml</file>
-        <file>components/MetricCard.qml</file>
         <file>components/ActivityHeatmap.qml</file>
         <file>components/BreakdownList.qml</file>
     </qresource>

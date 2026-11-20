@@ -3,11 +3,11 @@
 #include <QDateTime>
 #include <QDebug>
 
-Backend::Backend(const QString &dbPath, const QString &customSessionsDir, QObject *parent)
+Backend::Backend(const QString &dbPath, const QString &customSessionsDir, QObject *parent, bool autoSyncTrm)
     : QObject(parent),
       m_sessionsDir(customSessionsDir),
       m_storage(dbPath, this),
-      m_trm(dbPath.isEmpty() ? QString() : dbPath + ".trm.json", this) {
+      m_trm(dbPath.isEmpty() ? QString() : dbPath + ".trm.json", this, autoSyncTrm) {
 
     connect(&m_trm, &TrmClient::rateChanged, this, &Backend::dataChanged);
     connect(&m_trm, &TrmClient::syncingChanged, this, &Backend::dataChanged);
@@ -76,6 +76,10 @@ void Backend::recalculate() {
     m_projectBreakdown = m_storage.getBreakdown("project", startMs, endMs);
     m_modelBreakdown = m_storage.getBreakdown("model", startMs, endMs);
     m_agentBreakdown = m_storage.getBreakdown("agent", startMs, endMs);
+
+    const auto streak = m_storage.getStreak();
+    m_currentStreak = streak.currentStreak;
+    m_maxStreak = streak.maxStreak;
 
     // Heatmap: show at least the last 52 weeks or range depending on user selection
     const QDateTime now = QDateTime::currentDateTime();

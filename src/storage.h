@@ -17,6 +17,11 @@ struct UsageSummary {
     int totalSessions = 0;
 };
 
+struct StreakInfo {
+    int currentStreak = 0;
+    int maxStreak = 0;
+};
+
 class Storage : public QObject {
     Q_OBJECT
 
@@ -28,10 +33,12 @@ public:
     int syncFromPiSessions(const QString &customSessionsDir = {});
 
     UsageSummary getSummary(qint64 startTimeMs, qint64 endTimeMs) const;
+    StreakInfo getStreak(const QDate &referenceDate = QDate::currentDate()) const;
     QVariantList getHeatmapDays(qint64 startTimeMs, qint64 endTimeMs) const;
     QVariantList getBreakdown(const QString &dimension, qint64 startTimeMs, qint64 endTimeMs) const;
 
     QString defaultSessionsDir() const;
+    QString connectionName() const { return m_connectionName; }
     static QString extractProjectFromDirName(const QString &dirName);
 
 private:

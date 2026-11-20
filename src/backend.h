@@ -22,6 +22,8 @@ class Backend : public QObject {
     Q_PROPERTY(qint64 thinkingTokens READ thinkingTokens NOTIFY dataChanged)
     Q_PROPERTY(int totalTurns READ totalTurns NOTIFY dataChanged)
     Q_PROPERTY(int totalSessions READ totalSessions NOTIFY dataChanged)
+    Q_PROPERTY(int currentStreak READ currentStreak NOTIFY dataChanged)
+    Q_PROPERTY(int maxStreak READ maxStreak NOTIFY dataChanged)
     Q_PROPERTY(double trmRate READ trmRate NOTIFY dataChanged)
     Q_PROPERTY(bool isSyncing READ isSyncing NOTIFY dataChanged)
     Q_PROPERTY(QString lastSyncStatus READ lastSyncStatus NOTIFY dataChanged)
@@ -32,7 +34,8 @@ class Backend : public QObject {
     Q_PROPERTY(QVariantList agentBreakdown READ agentBreakdown NOTIFY dataChanged)
 
 public:
-    explicit Backend(const QString &dbPath = {}, const QString &customSessionsDir = {}, QObject *parent = nullptr);
+    explicit Backend(const QString &dbPath = {}, const QString &customSessionsDir = {},
+                     QObject *parent = nullptr, bool autoSyncTrm = true);
     ~Backend() override = default;
 
     QString currentRange() const { return m_currentRange; }
@@ -49,6 +52,8 @@ public:
     qint64 thinkingTokens() const { return m_summary.thinkingTokens; }
     int totalTurns() const { return m_summary.totalTurns; }
     int totalSessions() const { return m_summary.totalSessions; }
+    int currentStreak() const { return m_currentStreak; }
+    int maxStreak() const { return m_maxStreak; }
 
     double trmRate() const { return m_trm.rate(); }
     bool isSyncing() const { return m_isSyncing || m_trm.isSyncing(); }
@@ -78,6 +83,8 @@ private:
 
     QString m_currentRange = "7d";
     UsageSummary m_summary;
+    int m_currentStreak = 0;
+    int m_maxStreak = 0;
     QVariantList m_heatmapData;
     QVariantList m_projectBreakdown;
     QVariantList m_modelBreakdown;

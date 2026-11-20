@@ -1,5 +1,7 @@
 #include "storage.h"
 
+#include <algorithm>
+
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
@@ -93,11 +95,12 @@ QString Storage::extractProjectFromDirName(const QString &dirName) {
         return parts.isEmpty() ? "Subagent" : QString("Agent (%1)").arg(parts.last());
     }
 
-    if (raw == "home-juan" || raw == "home")
+    const QString userName = QFileInfo(QDir::homePath()).fileName();
+    const QString homePrefix = "home-" + userName + "-";
+    if (raw == "home-" + userName || raw == "home")
         return "Home";
 
-    const QString homePrefix = "home-juan-";
-    if (raw.startsWith(homePrefix)) {
+    if (!userName.isEmpty() && raw.startsWith(homePrefix)) {
         raw = raw.mid(homePrefix.length());
     } else if (raw.startsWith("home-")) {
         int secondDash = raw.indexOf('-', 5);
@@ -127,7 +130,10 @@ int Storage::syncFromPiSessions(const QString &customSessionsDir) {
         return 0;
 
     int newRecords = 0;
-    m_db.transaction();
+    if (!m_db.transaction()) {
+        qWarning() << "Failed to start database transaction:" << m_db.lastError().text();
+        return 0;
+    }
 
     QSqlQuery insertQuery(m_db);
     insertQuery.prepare(R"(
@@ -243,7 +249,11 @@ int Storage::syncFromPiSessions(const QString &customSessionsDir) {
         }
     }
 
-    m_db.commit();
+    if (!m_db.commit()) {
+        qWarning() << "Failed to commit database transaction:" << m_db.lastError().text();
+        m_db.rollback();
+        return 0;
+    }
     return newRecords;
 }
 
@@ -275,6 +285,81 @@ UsageSummary Storage::getSummary(qint64 startTimeMs, qint64 endTimeMs) const {
         summary.totalSessions = q.value(6).toInt();
     }
     return summary;
+}
+
+StreakInfo Storage::getStreak(const QDate &referenceDate) const {
+    StreakInfo info;
+    QSqlQuery q(m_db);
+    q.prepare("SELECT DISTINCT date FROM events ORDER BY date DESC;");
+    if (!q.exec()) {
+        return info;
+    }
+
+    QList<QDate> dates;
+    while (q.next()) {
+        const QString str = q.value(0).toString();
+        const QDate d = QDate::fromString(str, Qt::ISODate);
+        if (d.isValid() && (dates.isEmpty() || dates.last() != d)) {
+            dates.append(d);
+        }
+    }
+
+    if (dates.isEmpty()) {
+        return info;
+    }
+
+    // Current streak calculation relative to referenceDate
+    // The streak is active if there is activity on referenceDate OR referenceDate - 1 (yesterday)
+    QDate currentExpected;
+    bool streakStarted = false;
+
+    for (const QDate &d : dates) {
+        if (!streakStarted) {
+            if (d == referenceDate) {
+                info.currentStreak = 1;
+                currentExpected = referenceDate.addDays(-1);
+                streakStarted = true;
+            } else if (d == referenceDate.addDays(-1)) {
+                info.currentStreak = 1;
+                currentExpected = referenceDate.addDays(-2);
+                streakStarted = true;
+            } else if (d < referenceDate.addDays(-1)) {
+                // Latest activity is older than yesterday, current streak is 0
+                break;
+            }
+        } else {
+            if (d == currentExpected) {
+                info.currentStreak++;
+                currentExpected = currentExpected.addDays(-1);
+            } else if (d < currentExpected) {
+                // Gap in streak
+                break;
+            }
+        }
+    }
+
+    // Longest streak calculation across all recorded history
+    QList<QDate> ascDates = dates;
+    std::sort(ascDates.begin(), ascDates.end());
+
+    int longest = 0;
+    int currentRun = 0;
+    QDate prev;
+
+    for (const QDate &d : ascDates) {
+        if (prev.isNull()) {
+            currentRun = 1;
+        } else if (d == prev.addDays(1)) {
+            currentRun++;
+        } else {
+            currentRun = 1;
+        }
+        longest = std::max(longest, currentRun);
+        prev = d;
+    }
+
+    info.maxStreak = longest;
+    return info;
 }
 
 QVariantList Storage::getHeatmapDays(qint64 startTimeMs, qint64 endTimeMs) const {

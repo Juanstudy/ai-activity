@@ -13,6 +13,11 @@
 Theme::Theme(const QString &directory, QObject *parent, const QString &hyprctl)
     : QObject(parent),
       m_directory(directory.isEmpty() ? QDir::homePath() + "/.local/state/omarchy/current" : directory) {
+    bool ok = false;
+    const double envScale = qEnvironmentVariable("AI_ACTIVITY_SCALE").toDouble(&ok);
+    if (ok && envScale >= 0.5 && envScale <= 3.0)
+        m_uiScale = envScale;
+
     m_debounce.setSingleShot(true);
     m_debounce.setInterval(80);
     connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, [this] { m_debounce.start(); });
@@ -55,6 +60,13 @@ void Theme::refreshRounding() {
         return;
     m_roundingProcess.start(m_hyprctl, {"-j", "getoption", "decoration:rounding"});
     m_roundingTimeout.start();
+}
+
+void Theme::setUiScale(qreal scale) {
+    if (scale < 0.5 || scale > 3.0 || qFuzzyCompare(m_uiScale, scale))
+        return;
+    m_uiScale = scale;
+    emit uiScaleChanged();
 }
 
 QString Theme::readAccent(const QString &path) {
