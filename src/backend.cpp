@@ -27,6 +27,7 @@ Backend::Backend(const QString &dbPath, const QString &customSessionsDir, QObjec
             m_registry->setEnabled("omp", false);
             m_registry->setEnabled("claude", false);
             m_registry->setEnabled("opencode", false);
+            m_registry->setEnabled("t3", false);
             m_registry->setRootPath("pi", customSessionsDir);
         }
     }
