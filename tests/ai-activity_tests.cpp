@@ -21,6 +21,7 @@
 #include "parsers/pishapedparser.h"
 #include "parsers/claudeparser.h"
 #include "parsers/opencodeparser.h"
+#include "parsers/t3parser.h"
 #include "parsers/sourceregistry.h"
 
 namespace {
@@ -74,6 +75,7 @@ private slots:
     void testOmpParser();
     void testClaudeParser();
     void testOpenCodeParser();
+    void testT3Parser();
     void testIncrementalSync();
     void testRegistryDisabledSources();
     void testBackendSourceWiring();
@@ -717,6 +719,131 @@ void AiActivityTests::testOpenCodeParser() {
     QCOMPARE(evSub.costUsd, 0.002);
 }
 
+void AiActivityTests::testT3Parser() {
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+
+    const QString t3Root = tempDir.path() + "/.t3/userdata";
+    QVERIFY(QDir().mkpath(t3Root));
+
+    // Test projectFromWorkspace helper
+    QCOMPARE(T3Parser::projectFromWorkspace(QDir::homePath() + "/Projects/ai-activity"), QString("Projects/ai-activity"));
+    QCOMPARE(T3Parser::projectFromWorkspace(QDir::homePath() + "/.t3/scratch"), QString("No project"));
+    QCOMPARE(T3Parser::projectFromWorkspace(QDir::homePath()), QString("Home"));
+    QCOMPARE(T3Parser::projectFromWorkspace(""), QString("No project"));
+    QCOMPARE(T3Parser::projectFromWorkspace("/opt/custom"), QString("/opt/custom"));
+
+    // Create synthetic statev2.sqlite
+    const QString dbPath = t3Root + "/statev2.sqlite";
+    {
+        QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", "fixture_test_t3");
+        db.setDatabaseName(dbPath);
+        QVERIFY(db.open());
+        QSqlQuery q(db);
+        QVERIFY(q.exec("CREATE TABLE projection_projects (project_id TEXT PRIMARY KEY, title TEXT, workspace_root TEXT);"));
+        QVERIFY(q.exec("CREATE TABLE orchestration_v2_projection_threads (thread_id TEXT PRIMARY KEY, project_id TEXT, payload_json TEXT);"));
+        QVERIFY(q.exec("CREATE TABLE orchestration_v2_projection_provider_threads (provider_thread_id TEXT PRIMARY KEY, thread_id TEXT, payload_json TEXT, driver TEXT);"));
+
+        const QString home = QDir::homePath();
+        QVERIFY(q.exec(QString("INSERT INTO projection_projects VALUES ('p1', 'MyProject', '%1/Projects/my-app');").arg(home)));
+        QVERIFY(q.exec("INSERT INTO orchestration_v2_projection_threads VALUES ('t1', 'p1', '{\"lineage\":{\"relationshipToParent\":\"user\"}}');"));
+        QVERIFY(q.exec("INSERT INTO orchestration_v2_projection_provider_threads VALUES ('pt1', 't1', '{\"nativeThreadRef\":{\"nativeId\":\"conv-alpha-123\"}}', 'antigravity');"));
+
+        QVERIFY(q.exec(QString("INSERT INTO projection_projects VALUES ('p2', 'SubProject', '%1/Projects/sub-app');").arg(home)));
+        QVERIFY(q.exec("INSERT INTO orchestration_v2_projection_threads VALUES ('t2', 'p2', '{\"lineage\":{\"relationshipToParent\":\"subagent\"}}');"));
+        QVERIFY(q.exec("INSERT INTO orchestration_v2_projection_provider_threads VALUES ('pt2', 't2', '{\"nativeThreadRef\":{\"nativeId\":\"conv-sub-456\"}}', 'antigravity');"));
+
+        db.close();
+    }
+    QSqlDatabase::removeDatabase("fixture_test_t3");
+
+    // Write transcript 1: conv-alpha-123
+    const QString conv1Dir = t3Root + "/providers/antigravity/hash/antigravity-acp/brain/conv-alpha-123/.system_generated/logs";
+    QVERIFY(QDir().mkpath(conv1Dir));
+    {
+        QFile f(conv1Dir + "/transcript.jsonl");
+        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Text));
+        f.write("{\"step_index\":0,\"source\":\"USER_EXPLICIT\",\"type\":\"USER_INPUT\",\"status\":\"DONE\",\"content\":\"hello\"}\n");
+        f.write("{\"step_index\":1,\"source\":\"MODEL\",\"type\":\"PLANNER_RESPONSE\",\"status\":\"DONE\",\"created_at\":\"2026-11-20T12:00:00Z\",\"model\":\"gemini-3.8-flash\",\"input_tokens\":1000,\"cache_read_tokens\":200,\"output_tokens\":150}\n");
+        f.write("{\"step_index\":2,\"source\":\"MODEL\",\"type\":\"PLANNER_RESPONSE\",\"status\":\"DONE\",\"created_at\":\"2026-11-20T12:01:00Z\",\"model\":\"gemini-3.8-flash\",\"input_tokens\":500,\"cache_read_tokens\":100,\"output_tokens\":80}\n");
+        f.close();
+    }
+
+    // Write transcript 2: conv-sub-456 (subagent)
+    const QString conv2Dir = t3Root + "/providers/antigravity/hash/antigravity-acp/brain/conv-sub-456/.system_generated/logs";
+    QVERIFY(QDir().mkpath(conv2Dir));
+    {
+        QFile f(conv2Dir + "/transcript.jsonl");
+        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Text));
+        f.write("{\"step_index\":1,\"source\":\"MODEL\",\"type\":\"PLANNER_RESPONSE\",\"status\":\"DONE\",\"created_at\":\"2026-11-20T12:05:00Z\",\"model\":\"gemini-1.5-pro\",\"input_tokens\":2000,\"cache_read_tokens\":0,\"output_tokens\":300}\n");
+        f.close();
+    }
+
+    // Write transcript 3: conv-unmapped-789 (unmapped, project fallback)
+    const QString conv3Dir = t3Root + "/providers/antigravity/hash/antigravity-acp/brain/conv-unmapped-789/.system_generated/logs";
+    QVERIFY(QDir().mkpath(conv3Dir));
+    {
+        QFile f(conv3Dir + "/transcript.jsonl");
+        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Text));
+        f.write("{\"step_index\":1,\"source\":\"MODEL\",\"type\":\"PLANNER_RESPONSE\",\"status\":\"DONE\",\"created_at\":\"2026-11-20T12:10:00Z\",\"model\":\"gemini-3.8-flash\",\"input_tokens\":300,\"cache_read_tokens\":0,\"output_tokens\":50}\n");
+        f.close();
+    }
+
+    T3Parser parser;
+    QCOMPARE(parser.source(), QString("t3"));
+
+    // Skip predicate
+    const ParseResult skipped = parser.parse(t3Root, [](const QString &, qint64, qint64) { return true; });
+    QCOMPARE(skipped.events.size(), 0);
+
+    // Full parse
+    const ParseResult parsed = parser.parse(t3Root, nullptr);
+    QCOMPARE(parsed.events.size(), 4);
+    QCOMPARE(parsed.files.size(), 3);
+
+    const NormalizedEvent *ev1 = nullptr;
+    const NormalizedEvent *evSub = nullptr;
+    const NormalizedEvent *evUnmapped = nullptr;
+
+    for (const NormalizedEvent &ev : parsed.events) {
+        if (ev.messageId == "conv-alpha-123:1")
+            ev1 = &ev;
+        else if (ev.sessionId == "conv-sub-456")
+            evSub = &ev;
+        else if (ev.sessionId == "conv-unmapped-789")
+            evUnmapped = &ev;
+    }
+
+    QVERIFY(ev1 != nullptr);
+    QCOMPARE(ev1->source, QString("t3"));
+    QCOMPARE(ev1->sessionId, QString("conv-alpha-123"));
+    QCOMPARE(ev1->project, QString("Projects/my-app"));
+    QCOMPARE(ev1->agent, QString("antigravity"));
+    QCOMPARE(ev1->model, QString("gemini-3.8-flash"));
+    QCOMPARE(ev1->provider, QString("antigravity"));
+    QCOMPARE(ev1->tokensIn, 1200LL); // 1000 + 200 cache
+    QCOMPARE(ev1->tokensOut, 150LL);
+    QCOMPARE(ev1->tokensTotal, 1350LL);
+    QCOMPARE(ev1->costUsd, 0.0);
+    QVERIFY(!ev1->isSubagent);
+
+    // Verify subagent
+    QVERIFY(evSub != nullptr);
+    QCOMPARE(evSub->source, QString("t3"));
+    QCOMPARE(evSub->agent, QString("subagent"));
+    QVERIFY(evSub->isSubagent);
+    QCOMPARE(evSub->project, QString("Projects/sub-app"));
+    QCOMPARE(evSub->tokensIn, 2000LL);
+    QCOMPARE(evSub->tokensOut, 300LL);
+
+    // Verify unmapped
+    QVERIFY(evUnmapped != nullptr);
+    QCOMPARE(evUnmapped->source, QString("t3"));
+    QCOMPARE(evUnmapped->agent, QString("antigravity"));
+    QVERIFY(!evUnmapped->isSubagent);
+    QCOMPARE(evUnmapped->project, QString("No project"));
+}
+
 void AiActivityTests::testIncrementalSync() {
     QTemporaryDir tempDir;
     QVERIFY(tempDir.isValid());
@@ -747,6 +874,7 @@ void AiActivityTests::testIncrementalSync() {
     registry.setEnabled("pi", false);
     registry.setEnabled("claude", false);
     registry.setEnabled("opencode", false);
+    registry.setEnabled("t3", false);
     registry.setEnabled("omp", true);
     registry.setRootPath("omp", root);
     registry.setParser("omp", counting);
@@ -804,6 +932,7 @@ void AiActivityTests::testRegistryDisabledSources() {
     registry.setEnabled("pi", false);
     registry.setEnabled("claude", false);
     registry.setEnabled("opencode", false);
+    registry.setEnabled("t3", false);
     registry.setEnabled("omp", false);
     registry.setRootPath("omp", root);
     registry.setParser("omp", counting);
@@ -851,10 +980,16 @@ void AiActivityTests::testBackendSourceWiring() {
                                           "{\"type\":\"cost-state\",\"totalCostUSD\":0.01}\n")
                                       .arg(QDateTime::fromMSecsSinceEpoch(nowMs).toUTC().toString(Qt::ISODateWithMs))
                                       .toUtf8();
+    const QByteArray t3Line = QString("{\"step_index\":1,\"source\":\"MODEL\",\"type\":\"PLANNER_RESPONSE\",\"status\":\"DONE\","
+                                      "\"created_at\":\"%1\",\"model\":\"gemini-3.8-flash\","
+                                      "\"input_tokens\":1,\"cache_read_tokens\":0,\"output_tokens\":1}\n")
+                                  .arg(QDateTime::fromMSecsSinceEpoch(nowMs).toUTC().toString(Qt::ISODateWithMs))
+                                  .toUtf8();
 
     writeRecord(home + "/.pi/agent/sessions/--home-juan-Projects-pi--/pi.jsonl", piLine);
     writeRecord(home + "/.omp/agent/sessions/--home-juan-Projects-omp--/omp.jsonl", ompLine);
     writeRecord(home + "/.claude/projects/slug/session.jsonl", claudeLine);
+    writeRecord(home + "/.t3/userdata/providers/antigravity/hash/antigravity-acp/brain/conv-t3/.system_generated/logs/transcript.jsonl", t3Line);
 
     {
         QVERIFY(QDir().mkpath(home + "/.local/share/opencode"));
@@ -892,10 +1027,12 @@ void AiActivityTests::testBackendSourceWiring() {
     QVERIFY(fullAgents.contains("omp"));
     QVERIFY(fullAgents.contains("claude"));
     QVERIFY(fullAgents.contains("opencode"));
+    QVERIFY(fullAgents.contains("antigravity"));
     QVERIFY(hermeticAgents.contains("pi"));
     QVERIFY(!hermeticAgents.contains("omp"));
     QVERIFY(!hermeticAgents.contains("claude"));
     QVERIFY(!hermeticAgents.contains("opencode"));
+    QVERIFY(!hermeticAgents.contains("antigravity"));
 }
 
 QTEST_MAIN(AiActivityTests)

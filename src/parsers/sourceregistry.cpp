@@ -6,6 +6,7 @@
 #include "claudeparser.h"
 #include "opencodeparser.h"
 #include "pishapedparser.h"
+#include "t3parser.h"
 #include "storage.h"
 
 SourceRegistry::SourceRegistry(Storage *storage) : m_storage(storage) {
@@ -15,6 +16,7 @@ SourceRegistry::SourceRegistry(Storage *storage) : m_storage(storage) {
         {QStringLiteral("omp"), home + "/.omp/agent/sessions", true, std::make_shared<OmpParser>()},
         {QStringLiteral("claude"), home + "/.claude/projects", true, std::make_shared<ClaudeParser>()},
         {QStringLiteral("opencode"), home + "/.local/share/opencode/opencode.db", true, std::make_shared<OpenCodeParser>()},
+        {QStringLiteral("t3"), home + "/.t3/userdata", true, std::make_shared<T3Parser>()},
         // Codex parser is not implemented yet; it stays off and is never read.
         {QStringLiteral("codex"), home + "/.codex/sessions", false, nullptr},
     };

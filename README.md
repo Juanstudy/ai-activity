@@ -22,10 +22,12 @@ configurable root path, so sources are opt-in and overridable; the shipped defau
 | omp | `~/.omp/agent/sessions` | enabled |
 | Claude | `~/.claude/projects` (including `subagents/`) | enabled |
 | OpenCode | `~/.local/share/opencode/opencode.db` | enabled |
+| T3 | `~/.t3/userdata` | enabled |
 | Codex | — | disabled, parser not implemented yet |
 
 Only files whose size or modification time changed are re-parsed. Claude stores cost once per
 session, so per-message Claude costs are **prorated estimates** from the session total by token share.
+T3 parses Antigravity conversation transcripts and resolves project names via `statev2.sqlite`.
 
 ## Build and Install
 
